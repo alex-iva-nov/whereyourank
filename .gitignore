@@ -1,0 +1,36 @@
+﻿# Node / Next.js
+node_modules/
+.next/
+out/
+coverage/
+
+# Build artifacts
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local raw WHOOP data (must stay out of VCS)
+*.csv
+!docs/**/*.csv
+!**/*sample*.csv
+
+# Optional local data folders
+data/local/
+whoop-exports/
