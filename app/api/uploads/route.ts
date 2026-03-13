@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 
 import { recomputeAnalyticsForUser } from "@/lib/analytics/recompute";
+import { publicEnv } from "@/lib/env";
 import { readCsv } from "@/lib/ingestion/csv/readCsv";
 import { runIngestion } from "@/lib/ingestion/run";
 import type { IngestionBatchResult, NormalizedUploadInput } from "@/lib/ingestion/types";
-import { publicEnv } from "@/lib/env";
-import { getRequiredConsentStatusForUser } from "@/lib/legal/consent";
 import {
   CONSENT_COPY_VERSION,
   PRIVACY_NOTICE_VERSION,
   TERMS_VERSION,
 } from "@/lib/legal/constants";
+import { getRequiredConsentStatusForUser } from "@/lib/legal/consent";
+import { trackProductEvent } from "@/lib/product-events-server";
 import { getAvailableMetricKeysForUser, getUploadReadinessForUser } from "@/lib/product/readiness";
 import { revalidateUserDataCount } from "@/lib/product/user-data-count";
 import { supabaseAdmin } from "@/lib/supabase/admin-client";
@@ -162,6 +163,14 @@ export async function POST(request: Request) {
         : failedFiles === 0
           ? "completed"
           : "partial";
+
+    await trackProductEvent(user.id, "upload_completed", {
+      status,
+      uploaded_files: uploadedFiles,
+      failed_files: failedFiles,
+      metrics_ready: availableMetrics.length > 0,
+      complete_bundle: uploadReadiness.isCompleteBundle,
+    });
 
     return NextResponse.json({
       status,

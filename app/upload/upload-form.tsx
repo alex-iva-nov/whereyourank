@@ -7,6 +7,7 @@ import {
   INFORMATIONAL_ONLY_CONSENT_TEXT,
   UPLOAD_PROCESSING_CONSENT_TEXT,
 } from "@/lib/legal/constants";
+import { postProductEvent } from "@/lib/product-events";
 import { REQUIRED_FILE_LABELS } from "@/lib/profile/demographics";
 
 type FileResult = {
@@ -116,6 +117,11 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
     setLoading(true);
 
     try {
+      await postProductEvent("upload_submitted", {
+        file_count: files.length,
+        filenames: files.map((file) => file.name),
+      }).catch(() => undefined);
+
       const formData = new FormData();
       files.forEach((file) => formData.append("files", file));
 

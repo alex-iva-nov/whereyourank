@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { trackProductEvent } from "@/lib/product-events-server";
 import { ACCEPTED_AGE_BUCKET_VALUES, SEX_OPTIONS } from "@/lib/profile/demographics";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 
@@ -53,6 +54,12 @@ export async function POST(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await trackProductEvent(user.id, "onboarding_completed", {
+    age_bucket: ageBucket,
+    sex,
+    country,
+  });
 
   return NextResponse.json({ ok: true });
 }

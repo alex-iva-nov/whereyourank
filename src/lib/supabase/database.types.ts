@@ -37,6 +37,7 @@ export interface Database {
       user_metric_percentiles: TableShape;
       deletion_requests: TableShape;
       privacy_events: TableShape;
+      product_events: TableShape;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -44,4 +45,3 @@ export interface Database {
     CompositeTypes: Record<string, never>;
   };
 }
-

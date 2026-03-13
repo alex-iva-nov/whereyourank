@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { trackProductEvent } from "@/lib/product-events-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 
 const SENTIMENT_VALUES = new Set(["loved_it", "confusing", "missing_something"]);
@@ -233,6 +234,11 @@ export async function POST(request: Request) {
     if (profileError) {
       throw new Error(`Failed to update feedback lifecycle: ${profileError.message}`);
     }
+
+    await trackProductEvent(user.id, "first_dashboard_feedback_submitted", {
+      sentiment: payload.sentiment,
+      has_message: message != null,
+    });
 
     return NextResponse.json({ ok: true, submittedAt });
   } catch (error) {

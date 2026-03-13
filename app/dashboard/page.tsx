@@ -8,6 +8,7 @@ import { requireOnboardingComplete } from "@/lib/auth/server";
 import { getFirstDashboardFeedbackPromptState } from "@/lib/feedback/first-dashboard";
 import { getUserDataCount } from "@/lib/product/user-data-count";
 import { formatAgeBucketLabel, formatSexLabel, getCountryName } from "@/lib/profile/demographics";
+import { DashboardViewTracker } from "./dashboard-view-tracker";
 import { DeleteDataForm } from "./delete-data-form";
 import { EarlyInsightsLoading, EarlyInsightsSection } from "./early-insights-section";
 import { FirstDashboardFeedbackCard } from "./first-dashboard-feedback-card";
@@ -27,6 +28,7 @@ export default async function DashboardPage() {
 
   return (
     <main style={{ maxWidth: 1000, margin: "30px auto", padding: 16 }}>
+      <DashboardViewTracker />
       <header style={{ background: "#fff", borderRadius: 8, padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
         <div>
           <BrandWordmark subtitle="Your WHOOP benchmarks and early insights." />

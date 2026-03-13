@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { postProductEvent } from "@/lib/product-events";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 
 export function SignInForm() {
@@ -30,6 +31,8 @@ export function SignInForm() {
         });
 
         if (signInError) throw signInError;
+
+        await postProductEvent("sign_in_completed", { method: "password" }).catch(() => undefined);
         router.push("/");
         router.refresh();
         return;
@@ -43,6 +46,10 @@ export function SignInForm() {
       if (signUpError) throw signUpError;
 
       if (data.session) {
+        await postProductEvent("sign_up_completed", {
+          method: "password",
+          email_confirmation_required: false,
+        }).catch(() => undefined);
         router.push("/");
         router.refresh();
       } else {
