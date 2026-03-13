@@ -8,7 +8,6 @@ import { getUploadReadinessForUser } from "@/lib/product/readiness";
 import { REQUIRED_FILE_LABELS } from "@/lib/profile/demographics";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 import { UploadForm } from "./upload-form";
-import { UploadPageViewTracker } from "./upload-page-view-tracker";
 
 export const metadata: Metadata = {
   title: "Upload WHOOP Files",
@@ -25,7 +24,6 @@ export default async function UploadPage() {
 
   return (
     <main style={{ maxWidth: 860, margin: "40px auto", padding: 16 }}>
-      <UploadPageViewTracker />
       <header style={{ marginBottom: 20 }}>
         <BrandWordmark subtitle="Upload your WHOOP export to unlock your first results." />
         <h1 style={{ marginBottom: 8 }}>Upload WHOOP files</h1>
