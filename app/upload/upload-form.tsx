@@ -1,20 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
   INFORMATIONAL_ONLY_CONSENT_TEXT,
   UPLOAD_PROCESSING_CONSENT_TEXT,
 } from "@/lib/legal/constants";
+import { postProductEvent } from "@/lib/product-events";
 import { REQUIRED_FILE_LABELS } from "@/lib/profile/demographics";
-
-const SUPPORTED_FILES = [
-  "physiological_cycles.csv",
-  "sleeps.csv",
-  "workouts.csv",
-  "journal_entries.csv",
-] as const;
 
 type FileResult = {
   filename: string;
@@ -69,7 +63,6 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
   const [informationalOnlyConsent, setInformationalOnlyConsent] = useState(false);
   const [consentLoading, setConsentLoading] = useState(false);
 
-  const supportedList = useMemo(() => SUPPORTED_FILES.join(", "), []);
   const uploadedKinds = new Set(result?.summary?.uploadReadiness?.uploadedKinds ?? []);
 
   const onSubmitConsent = async () => {
@@ -124,6 +117,11 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
     setLoading(true);
 
     try {
+      await postProductEvent("upload_submitted", {
+        file_count: files.length,
+        filenames: files.map((file) => file.name),
+      }).catch(() => undefined);
+
       const formData = new FormData();
       files.forEach((file) => formData.append("files", file));
 
@@ -197,8 +195,6 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
         </section>
       ) : null}
 
-      <p style={{ margin: 0, color: "#555" }}>Supported files: {supportedList}</p>
-      <p style={{ margin: 0, color: "#666" }}>Each CSV must include at least 10 data rows or it will be rejected.</p>
       <p style={{ margin: 0, color: "#666" }}>
         Your CSV files are processed and then deleted. We keep the derived metrics needed for your insights until you choose to delete your data.
       </p>

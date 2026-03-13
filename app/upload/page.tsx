@@ -5,10 +5,10 @@ import { BrandWordmark } from "@/components/brand-wordmark";
 import { requireOnboardingComplete } from "@/lib/auth/server";
 import { getRequiredConsentStatusForUser } from "@/lib/legal/consent";
 import { getUploadReadinessForUser } from "@/lib/product/readiness";
-import { getUserDataCount } from "@/lib/product/user-data-count";
 import { REQUIRED_FILE_LABELS } from "@/lib/profile/demographics";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 import { UploadForm } from "./upload-form";
+import { UploadPageViewTracker } from "./upload-page-view-tracker";
 
 export const metadata: Metadata = {
   title: "Upload WHOOP Files",
@@ -18,21 +18,17 @@ export default async function UploadPage() {
   const { user } = await requireOnboardingComplete();
   const supabase = await createSupabaseServerClient();
 
-  const [readiness, consentStatus, { totalUsers }] = await Promise.all([
+  const [readiness, consentStatus] = await Promise.all([
     getUploadReadinessForUser(supabase, user.id),
     getRequiredConsentStatusForUser(supabase, user.id),
-    getUserDataCount(),
   ]);
 
   return (
     <main style={{ maxWidth: 860, margin: "40px auto", padding: 16 }}>
+      <UploadPageViewTracker />
       <header style={{ marginBottom: 20 }}>
         <BrandWordmark subtitle="Upload your WHOOP export to unlock your first results." />
         <h1 style={{ marginBottom: 8 }}>Upload WHOOP files</h1>
-        <p style={{ color: "#444", margin: 0 }}>
-          We only support the standard WHOOP CSV files used for your benchmarks and early insights.
-        </p>
-        <p style={{ color: "#444", margin: "8px 0 0" }}>Built from data across {totalUsers} users.</p>
         <p style={{ margin: "8px 0 0", color: "#555" }}>
           By continuing, you agree to the <Link href="/privacy">Privacy Notice</Link> and <Link href="/terms">Terms of Use</Link>.
         </p>
@@ -40,9 +36,6 @@ export default async function UploadPage() {
 
       <section style={{ background: "#fff", padding: 16, borderRadius: 8, marginBottom: 20 }}>
         <h2 style={{ marginTop: 0 }}>Files needed for a complete upload</h2>
-        <p style={{ color: "#555", marginTop: 0 }}>
-          Upload any file first, then come back to complete the full set when you are ready.
-        </p>
         <div style={{ display: "grid", gap: 8 }}>
           {REQUIRED_FILE_LABELS.map((item) => {
             const isUploaded = readiness.uploadedKinds.includes(item.kind);

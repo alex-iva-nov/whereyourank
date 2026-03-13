@@ -21,7 +21,7 @@ type MilestoneCardProps = {
   unlocked: boolean;
 };
 
-type ComparisonTone = "green" | "yellow" | "red" | "neutral";
+type ComparisonTone = "green" | "red" | "neutral";
 
 type ComparisonCardProps = {
   title: string;
@@ -39,7 +39,6 @@ const checkIcon = (
 
 const toneColors: Record<ComparisonTone, { dot: string; ring: string }> = {
   green: { dot: "#2e7d32", ring: "#d8ecd9" },
-  yellow: { dot: "#c58b14", ring: "#f5e7bf" },
   red: { dot: "#c0392b", ring: "#f4d2cc" },
   neutral: { dot: "#8a8a8a", ring: "#e6e6e6" },
 };
@@ -84,23 +83,17 @@ function ComparisonCard({ title, body, tone }: ComparisonCardProps) {
 
 const getRecoveryTone = (percentile: number | null): ComparisonTone => {
   if (percentile == null) return "neutral";
-  if (percentile >= 67) return "green";
-  if (percentile >= 34) return "yellow";
-  return "red";
+  return percentile >= 50 ? "green" : "red";
 };
 
 const getSleepTone = (delta: number | null): ComparisonTone => {
   if (delta == null) return "neutral";
-  if (delta >= 15) return "green";
-  if (delta > -15) return "yellow";
-  return "red";
+  return delta >= 0 ? "green" : "red";
 };
 
 const getHrvTone = (delta: number | null): ComparisonTone => {
   if (delta == null) return "neutral";
-  if (delta >= 5) return "green";
-  if (delta > -5) return "yellow";
-  return "red";
+  return delta >= 0 ? "green" : "red";
 };
 
 const formatSleepDelta = (delta: number | null): string => {
@@ -141,9 +134,6 @@ function EarlyComparisonSection({ earlyComparison }: { earlyComparison: EarlyCom
   return (
     <div style={{ marginBottom: 16 }}>
       <h3 style={{ margin: "0 0 6px", fontSize: 22, color: "#183a1f" }}>How you compare so far</h3>
-      <p style={{ margin: "0 0 12px", color: "#555" }}>
-        Based on the first uploaded datasets. Comparisons become more accurate as more users join.
-      </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
         <ComparisonCard
@@ -162,10 +152,6 @@ function EarlyComparisonSection({ earlyComparison }: { earlyComparison: EarlyCom
           tone={getHrvTone(earlyComparison.hrv.delta)}
         />
       </div>
-
-      <p style={{ margin: "12px 0 0", color: "#666", fontSize: 13 }}>
-        Based on a small dataset. Accuracy improves as more users join.
-      </p>
     </div>
   );
 }
