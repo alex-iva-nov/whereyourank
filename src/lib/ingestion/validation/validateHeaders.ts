@@ -1,6 +1,6 @@
-import { buildHeaderMap, REQUIRED_HEADERS_BY_KIND } from "@/lib/ingestion/csv/headerMap";
-import type { IngestionErrorItem } from "@/lib/ingestion/types";
-import type { WhoopFileKind } from "@/lib/ingestion/kinds";
+import { buildHeaderMap, REQUIRED_HEADERS_BY_KIND } from "../csv/headerMap.ts";
+import type { IngestionErrorItem } from "../types.ts";
+import type { WhoopFileKind } from "../kinds.ts";
 
 export const validateHeaders = (headers: string[], fileKind: WhoopFileKind): IngestionErrorItem[] => {
   const map = buildHeaderMap(headers, fileKind);

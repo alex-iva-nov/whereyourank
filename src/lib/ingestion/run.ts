@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 
-import { readCsv } from "@/lib/ingestion/csv/readCsv";
 import { runIngestionForUpload } from "@/lib/ingestion/orchestrator";
 import { persistUpload } from "@/lib/ingestion/persistence/persistUpload";
 import type { DbClient, IngestionBatchResult, IngestionFileResult, NormalizedUploadInput } from "@/lib/ingestion/types";
@@ -15,8 +14,6 @@ export const runIngestion = async (
   const fileResults: IngestionFileResult[] = [];
 
   for (const file of files) {
-    const csv = readCsv(file.text);
-
     const upload = await persistUpload.create(db, {
       userId,
       storagePath: file.storagePath,
@@ -31,7 +28,7 @@ export const runIngestion = async (
     const result = await runIngestionForUpload(db, {
       userId,
       upload,
-      csv,
+      csv: file.csv,
       parserVersion: PARSER_VERSION,
     });
 

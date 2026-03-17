@@ -11,6 +11,7 @@ import {
   PRIVACY_NOTICE_VERSION,
   TERMS_VERSION,
 } from "@/lib/legal/constants";
+import { ensureValidMutationRequest } from "@/lib/security/mutation-guard";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 
 export async function GET() {
@@ -36,6 +37,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const invalidRequestResponse = ensureValidMutationRequest(request);
+  if (invalidRequestResponse) {
+    return invalidRequestResponse;
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },

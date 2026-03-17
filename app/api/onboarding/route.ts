@@ -2,12 +2,18 @@ import { NextResponse } from "next/server";
 
 import { trackProductEvent } from "@/lib/product-events-server";
 import { ACCEPTED_AGE_BUCKET_VALUES, SEX_OPTIONS } from "@/lib/profile/demographics";
+import { ensureValidMutationRequest } from "@/lib/security/mutation-guard";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 
 const AGE_BUCKETS = new Set<string>(ACCEPTED_AGE_BUCKET_VALUES);
 const SEX_VALUES = new Set<string>(SEX_OPTIONS.map((option) => option.value));
 
 export async function POST(request: Request) {
+  const invalidRequestResponse = ensureValidMutationRequest(request);
+  if (invalidRequestResponse) {
+    return invalidRequestResponse;
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },

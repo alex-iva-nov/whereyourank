@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { recomputeAnalyticsForUser } from "@/lib/analytics/recompute";
+import { revalidateUserEarlyInsights } from "@/lib/analytics/early-insights";
 import { publicEnv } from "@/lib/env";
 import { readCsv } from "@/lib/ingestion/csv/readCsv";
 import { runIngestion } from "@/lib/ingestion/run";
@@ -14,10 +15,13 @@ import { getRequiredConsentStatusForUser } from "@/lib/legal/consent";
 import { trackProductEvent } from "@/lib/product-events-server";
 import { getAvailableMetricKeysForUser, getUploadReadinessForUser } from "@/lib/product/readiness";
 import { revalidateUserDataCount } from "@/lib/product/user-data-count";
+import { ensureValidMutationRequest } from "@/lib/security/mutation-guard";
 import { supabaseAdmin } from "@/lib/supabase/admin-client";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 
 const MIN_UPLOAD_ROWS = 10;
+const MAX_UPLOAD_FILES = 8;
+const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
 
 const cleanupRawUploads = async (storagePaths: string[], userId: string) => {
   if (storagePaths.length === 0) {
@@ -41,6 +45,11 @@ const cleanupRawUploads = async (storagePaths: string[], userId: string) => {
 };
 
 export async function POST(request: Request) {
+  const invalidRequestResponse = ensureValidMutationRequest(request);
+  if (invalidRequestResponse) {
+    return invalidRequestResponse;
+  }
+
   const supabaseUser = await createSupabaseServerClient();
   const {
     data: { user },
@@ -75,15 +84,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
   }
 
+  if (files.length > MAX_UPLOAD_FILES) {
+    return NextResponse.json(
+      { error: `Please upload no more than ${MAX_UPLOAD_FILES} files at a time.` },
+      { status: 400 },
+    );
+  }
+
   const preparedFiles: NormalizedUploadInput[] = [];
   const batchErrors: Array<{ filename: string; message: string }> = [];
 
   for (const file of files) {
     try {
+      if (file.size > MAX_UPLOAD_FILE_BYTES) {
+        batchErrors.push({
+          filename: file.name,
+          message: `This file is too large. Please keep each CSV under ${Math.round(MAX_UPLOAD_FILE_BYTES / (1024 * 1024))} MB.`,
+        });
+        continue;
+      }
+
       const arrayBuffer = await file.arrayBuffer();
       const bytes = Buffer.from(arrayBuffer);
-      const text = bytes.toString("utf8");
-      const csv = readCsv(text);
+      const csv = readCsv(bytes.toString("utf8"));
 
       if (csv.rows.length < MIN_UPLOAD_ROWS) {
         batchErrors.push({
@@ -113,7 +136,7 @@ export async function POST(request: Request) {
         filename: file.name,
         mimeType: file.type,
         bytes,
-        text,
+        csv,
         storagePath,
       });
     } catch (error) {
@@ -151,6 +174,7 @@ export async function POST(request: Request) {
     }
 
     revalidateUserDataCount();
+    revalidateUserEarlyInsights(user.id);
 
     const uploadReadiness = await getUploadReadinessForUser(supabaseAdmin, user.id);
     const availableMetrics = await getAvailableMetricKeysForUser(supabaseAdmin, user.id);

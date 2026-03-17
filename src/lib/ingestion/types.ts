@@ -19,7 +19,7 @@ export type NormalizedUploadInput = {
   filename: string;
   mimeType: string;
   bytes: Buffer;
-  text: string;
+  csv: CsvData;
   storagePath: string;
 };
 

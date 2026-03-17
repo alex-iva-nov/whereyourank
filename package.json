@@ -14,7 +14,7 @@
                     "ingest:local":  "node scripts/run-local-ingestion.mjs",
                     "analytics:recompute":  "node scripts/recompute-analytics.mjs",
                     "seed:demo-cohort":  "node scripts/seed-demo-cohort.mjs",
-                    "test":  "node --test --test-isolation=none --experimental-strip-types src/lib/privacy/aggregate-guards.test.ts"
+                    "test":  "node --test --test-isolation=none --experimental-strip-types \"src/**/*.test.ts\""
                 },
     "dependencies":  {
                          "@supabase/ssr":  "^0.5.2",

@@ -9,6 +9,7 @@ import {
 } from "@/lib/legal/constants";
 import { postProductEvent } from "@/lib/product-events";
 import { REQUIRED_FILE_LABELS } from "@/lib/profile/demographics";
+import { MUTATION_HEADERS } from "@/lib/security/client-request";
 
 type FileResult = {
   filename: string;
@@ -78,7 +79,7 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
     try {
       const response = await fetch("/api/consents", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...MUTATION_HEADERS },
         body: JSON.stringify({ whoopProcessingConsent, informationalOnlyConsent }),
       });
 
@@ -127,6 +128,7 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
 
       const response = await fetch("/api/uploads", {
         method: "POST",
+        headers: MUTATION_HEADERS,
         body: formData,
       });
 
@@ -166,36 +168,36 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
   return (
     <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
       {!consentSatisfied ? (
-        <section style={{ border: "1px solid #e5c07b", background: "#fff8e1", borderRadius: 8, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Consent required</h3>
-          <p style={{ marginTop: 0, color: "#555" }}>
+        <section style={{ border: "1px solid rgba(32, 217, 133, 0.16)", background: "rgba(23, 29, 34, 0.86)", borderRadius: 22, padding: 18 }}>
+          <h3 style={{ marginTop: 0, color: "#f5f5f5", textTransform: "uppercase", letterSpacing: "-0.03em" }}>Consent required</h3>
+          <p style={{ marginTop: 0, color: "#a3adb4" }}>
             Before you upload your WHOOP data, please review the terms below and confirm that you understand this service is for informational use only.
           </p>
 
-          <h4 style={{ margin: "12px 0 6px" }}>Before you continue</h4>
-          <p style={{ marginTop: 0, color: "#555" }}>Please accept both statements to continue.</p>
+          <h4 style={{ margin: "12px 0 6px", color: "#f5f5f5" }}>Before you continue</h4>
+          <p style={{ marginTop: 0, color: "#a3adb4" }}>Please accept both statements to continue.</p>
 
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
             <input type="checkbox" checked={whoopProcessingConsent} onChange={(event) => setWhoopProcessingConsent(event.target.checked)} />
-            <span>{UPLOAD_PROCESSING_CONSENT_TEXT}</span>
+            <span style={{ color: "#d0d7dc" }}>{UPLOAD_PROCESSING_CONSENT_TEXT}</span>
           </label>
 
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
             <input type="checkbox" checked={informationalOnlyConsent} onChange={(event) => setInformationalOnlyConsent(event.target.checked)} />
-            <span>{INFORMATIONAL_ONLY_CONSENT_TEXT}</span>
+            <span style={{ color: "#d0d7dc" }}>{INFORMATIONAL_ONLY_CONSENT_TEXT}</span>
           </label>
 
-          <p style={{ margin: "8px 0", color: "#555" }}>
+          <p style={{ margin: "8px 0", color: "#a3adb4" }}>
             By continuing, you agree to the <a href="/privacy">Privacy Notice</a> and <a href="/terms">Terms of Use</a>.
           </p>
 
-          <button type="button" onClick={onSubmitConsent} disabled={consentLoading || !whoopProcessingConsent || !informationalOnlyConsent} style={{ padding: 10 }}>
+          <button type="button" onClick={onSubmitConsent} disabled={consentLoading || !whoopProcessingConsent || !informationalOnlyConsent} style={{ padding: "12px 16px", borderRadius: 999, border: "none", background: "#f5f5f5", color: "#080808", fontWeight: 700 }}>
             {consentLoading ? "Saving..." : "Save and continue"}
           </button>
         </section>
       ) : null}
 
-      <p style={{ margin: 0, color: "#666" }}>
+      <p style={{ margin: 0, color: "#a3adb4" }}>
         Your CSV files are processed and then deleted. We keep the derived metrics needed for your insights until you choose to delete your data.
       </p>
 
@@ -208,34 +210,35 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
           const nextFiles = Array.from(e.target.files ?? []);
           setFiles(nextFiles);
         }}
+        style={{ padding: 14, borderRadius: 16, border: "1px solid #2d353c", background: "#171d22", color: "#f5f5f5" }}
       />
 
       {files.length > 0 ? (
-        <ul style={{ margin: 0, paddingLeft: 20 }}>
+        <ul style={{ margin: 0, paddingLeft: 20, color: "#d0d7dc" }}>
           {files.map((file) => (
             <li key={`${file.name}-${file.size}`}>{file.name}</li>
           ))}
         </ul>
       ) : null}
 
-      {!consentSatisfied ? <p style={{ margin: 0, color: "#8a6d3b" }}>Please accept both statements before uploading your data.</p> : null}
+      {!consentSatisfied ? <p style={{ margin: 0, color: "#20d985" }}>Please accept both statements before uploading your data.</p> : null}
 
       {error ? <p style={{ color: "#b00020", margin: 0 }}>{error}</p> : null}
 
       {result ? (
-        <div style={{ border: "1px solid #ddd", borderRadius: 6, padding: 10, display: "grid", gap: 12 }}>
+        <div style={{ border: "1px solid rgba(32, 217, 133, 0.12)", borderRadius: 22, padding: 18, display: "grid", gap: 12, background: "rgba(23, 29, 34, 0.86)" }}>
           <div>
-            <p style={{ margin: 0, fontWeight: 600 }}>
+            <p style={{ margin: 0, fontWeight: 600, color: "#f5f5f5" }}>
               {result.failedFiles === 0 ? "Your upload was processed." : "Your upload finished with a few issues."}
             </p>
-            <p style={{ margin: "6px 0 0", color: "#555" }}>
+            <p style={{ margin: "6px 0 0", color: "#a3adb4" }}>
               {result.summary?.uploadReadiness?.isCompleteBundle ? "You have all required WHOOP files." : "You can upload more files any time to complete your set."}
             </p>
           </div>
 
           {result.batchErrors.length > 0 ? (
             <div>
-              <strong>Files that need attention:</strong>
+              <strong style={{ color: "#f5f5f5" }}>Files that need attention:</strong>
               <ul style={{ margin: "6px 0 0", paddingLeft: 20 }}>
                 {result.batchErrors.map((item) => (
                   <li key={`${item.filename}-${item.message}`}>
@@ -247,13 +250,13 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
           ) : null}
 
           <div>
-            <strong>File status</strong>
+            <strong style={{ color: "#f5f5f5" }}>File status</strong>
             <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
               {REQUIRED_FILE_LABELS.map((item) => {
                 const isUploaded = uploadedKinds.has(item.kind);
 
                 return (
-                  <p key={item.kind} style={{ margin: 0, color: isUploaded ? "#1b5e20" : "#555", display: "flex", gap: 8 }}>
+                  <p key={item.kind} style={{ margin: 0, color: isUploaded ? "#20d985" : "#a3adb4", display: "flex", gap: 8 }}>
                     <span aria-hidden="true">{isUploaded ? "\u2713" : "\u25CB"}</span>
                     <span>{item.filename}{isUploaded ? " uploaded" : " missing"}</span>
                   </p>
@@ -265,10 +268,10 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
       ) : null}
 
       <div style={{ display: "flex", gap: 10 }}>
-        <button type="submit" disabled={loading || !consentSatisfied} style={{ padding: 10 }}>
+        <button type="submit" disabled={loading || !consentSatisfied} style={{ padding: "12px 16px", borderRadius: 999, border: "none", background: "#f5f5f5", color: "#080808", fontWeight: 700 }}>
           {loading ? "Uploading..." : "Upload files"}
         </button>
-        <button type="button" disabled={refreshing || loading} onClick={refreshStatus} style={{ padding: 10 }}>
+        <button type="button" disabled={refreshing || loading} onClick={refreshStatus} style={{ padding: "12px 16px", borderRadius: 999, border: "1px solid #2d353c", background: "#171d22", color: "#f5f5f5", fontWeight: 600 }}>
           {refreshing ? "Refreshing..." : "Refresh"}
         </button>
       </div>

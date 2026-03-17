@@ -1,3 +1,5 @@
+import { MUTATION_HEADERS } from "@/lib/security/client-request";
+
 export const PRODUCT_EVENT_NAMES = [
   "sign_in_completed",
   "sign_up_completed",
@@ -20,7 +22,7 @@ export const postProductEvent = async (
 ) => {
   const response = await fetch("/api/product-events", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...MUTATION_HEADERS },
     body: JSON.stringify({ eventName, eventPayload }),
   });
 

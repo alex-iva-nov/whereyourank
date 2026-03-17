@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { MUTATION_HEADERS } from "@/lib/security/client-request";
+
 type Sentiment = "loved_it" | "confusing" | "missing_something";
 
 type FirstDashboardFeedbackCardProps = {
@@ -57,7 +59,7 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
       try {
         const response = await fetch("/api/feedback/first-dashboard", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...MUTATION_HEADERS },
           body: JSON.stringify({ action: "mark_seen" }),
         });
 
@@ -87,7 +89,7 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
     try {
       const response = await fetch("/api/feedback/first-dashboard", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...MUTATION_HEADERS },
         body: JSON.stringify({ action: "dismiss" }),
       });
 
@@ -116,7 +118,7 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
     try {
       const response = await fetch("/api/feedback/first-dashboard", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...MUTATION_HEADERS },
         body: JSON.stringify({
           action: "submit",
           sentiment: selectedSentiment,
@@ -146,9 +148,9 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
 
   if (success) {
     return (
-      <section style={{ background: "#fff", borderRadius: 8, border: "1px solid #d7eadb", padding: 16, marginTop: 12 }}>
-        <p style={{ margin: 0, color: "#1b5e20", fontWeight: 600 }}>
-          Thanks - this feedback goes straight to the founder and helps improve WhereYouRank.
+      <section style={{ background: "linear-gradient(180deg, #121212 0%, #090909 100%)", borderRadius: 28, border: "1px solid #232323", padding: 24, marginTop: 16, boxShadow: "0 24px 80px rgba(0, 0, 0, 0.35)" }}>
+        <p style={{ margin: 0, color: "#79f28b", fontWeight: 600 }}>
+          Thanks - this feedback goes straight to the founder and helps improve WhereYouRank
         </p>
       </section>
     );
@@ -157,13 +159,34 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
   const selectedAction = selectedSentiment ? ACTIONS[selectedSentiment] : null;
 
   return (
-    <section style={{ background: "#fff", borderRadius: 8, border: "1px solid #ddd", padding: 16, marginTop: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+    <section style={{ background: "linear-gradient(180deg, #121212 0%, #090909 100%)", borderRadius: 28, border: "1px solid #232323", padding: 24, marginTop: 16, boxShadow: "0 24px 80px rgba(0, 0, 0, 0.35)" }}>
+      <style>{`
+        .first-impression-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+        }
+
+        .first-impression-options {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          margin-top: 14px;
+        }
+
+        @media (max-width: 640px) {
+          .first-impression-header {
+            flex-direction: column;
+          }
+        }
+      `}</style>
+      <div className="first-impression-header">
         <div>
-          <h2 style={{ margin: 0 }}>How's your first impression?</h2>
+          <h2 style={{ margin: 0, color: "#f5f5f5", textTransform: "uppercase", letterSpacing: "-0.04em" }}>How&apos;s your first impression?</h2>
           {!selectedAction ? (
-            <p style={{ margin: "8px 0 0", color: "#555" }}>
-              A quick note helps shape the next version of WhereYouRank.
+            <p style={{ margin: "8px 0 0", color: "#7c7c7c" }}>
+              A quick note helps shape the next version of WhereYouRank
             </p>
           ) : null}
         </div>
@@ -171,14 +194,14 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
           type="button"
           onClick={onDismiss}
           disabled={dismissing || sending}
-          style={{ border: "none", background: "transparent", color: "#666", cursor: dismissing || sending ? "default" : "pointer", padding: 0 }}
+          style={{ border: "none", background: "transparent", color: "#7c7c7c", cursor: dismissing || sending ? "default" : "pointer", padding: 0 }}
         >
           {dismissing ? "Hiding..." : "Dismiss"}
         </button>
       </div>
 
       {!selectedAction ? (
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+        <div className="first-impression-options">
           {(Object.entries(ACTIONS) as Array<[Sentiment, ActionConfig]>).map(([sentiment, config]) => (
             <button
               key={sentiment}
@@ -187,7 +210,7 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
                 setSelectedSentiment(sentiment);
                 setError(null);
               }}
-              style={{ padding: "10px 14px", borderRadius: 999, border: "1px solid #ddd", background: "#fafafa", cursor: "pointer", fontWeight: 600 }}
+              style={{ padding: "10px 8px", borderRadius: 999, border: "1px solid #242424", background: "#171717", color: "#f5f5f5", cursor: "pointer", fontWeight: 600, minWidth: 0, fontSize: 14 }}
             >
               {config.label}
             </button>
@@ -196,10 +219,10 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
       ) : (
         <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 18 }}>{selectedAction.heading}</h3>
-            <p style={{ margin: "8px 0 0", color: "#333" }}>{selectedAction.prompt}</p>
-            <p style={{ margin: "6px 0 0", color: "#666", fontSize: 13 }}>
-              Your note goes directly to me, please help me to improve WhereYouRank and provide you more useful insights.
+            <h3 style={{ margin: 0, fontSize: 18, color: "#f5f5f5" }}>{selectedAction.heading}</h3>
+            <p style={{ margin: "8px 0 0", color: "#b9b9b9" }}>{selectedAction.prompt}</p>
+            <p style={{ margin: "6px 0 0", color: "#7c7c7c", fontSize: 13 }}>
+              Your note goes directly to me, please help me to improve WhereYouRank and provide you more useful insights
             </p>
           </div>
 
@@ -209,7 +232,7 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
             placeholder={selectedAction.placeholder}
             rows={4}
             maxLength={1500}
-            style={{ width: "100%", resize: "vertical", borderRadius: 8, border: "1px solid #ddd", padding: 10, font: "inherit" }}
+            style={{ width: "100%", resize: "vertical", borderRadius: 16, border: "1px solid #242424", padding: 12, font: "inherit", background: "#171717", color: "#f5f5f5" }}
           />
 
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -217,7 +240,7 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
               type="button"
               onClick={onSubmit}
               disabled={sending}
-              style={{ padding: "10px 14px", borderRadius: 6, border: "1px solid #111", background: "#111", color: "#fff", fontWeight: 600, cursor: sending ? "default" : "pointer" }}
+              style={{ padding: "10px 14px", borderRadius: 999, border: "none", background: "#f5f5f5", color: "#080808", fontWeight: 700, cursor: sending ? "default" : "pointer" }}
             >
               {sending ? "Sending..." : "Send feedback"}
             </button>
@@ -228,7 +251,7 @@ export function FirstDashboardFeedbackCard({ promptSeenAt }: FirstDashboardFeedb
                 setError(null);
               }}
               disabled={sending}
-              style={{ padding: "10px 14px", borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: sending ? "default" : "pointer" }}
+              style={{ padding: "10px 14px", borderRadius: 999, border: "1px solid #242424", background: "#171717", color: "#f5f5f5", cursor: sending ? "default" : "pointer" }}
             >
               Choose another answer
             </button>

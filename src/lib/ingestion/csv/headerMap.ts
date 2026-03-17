@@ -1,4 +1,4 @@
-import type { WhoopFileKind } from "@/lib/ingestion/kinds";
+import type { WhoopFileKind } from "../kinds.ts";
 
 export const normalizeHeaderLabel = (value: string): string =>
   value.trim().toLowerCase().replace(/\s+/g, " ");

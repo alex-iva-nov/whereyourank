@@ -1,114 +1,30 @@
+import { revalidateTag, unstable_cache } from "next/cache";
 
 import { createSupabaseServerClient } from "../supabase/server-client";
 
-type InsightStatus = "ok" | "insufficient_data" | "error";
-type InsightKey =
-  | "optimal_sleep_window"
-  | "real_sleep_need"
+export type EarlyInsightStatus = "ok" | "insufficient_data" | "error";
+export type EarlyInsightTone = "green" | "red" | "neutral";
+export type EarlyInsightKey =
+  | "sober_streak_effect"
+  | "optimal_sleep_cutoff"
   | "body_battery_leak"
-  | "hrv_baseline"
-  | "hrv_boosters"
+  | "strain_limit"
   | "recovery_speed"
-  | "recovery_insight"
-  | "recovery_killers"
-  | "strain_tolerance";
+  | "best_worst_day"
+  | "hrv_threshold"
+  | "sleep_gap_days"
+  | "recovery_streak";
 
-export type InsightConfidence = "Strong signal" | "Medium confidence" | "Early estimate" | "Not enough data yet";
-
-type InsightCardBase = {
-  key: InsightKey;
-  status: InsightStatus;
+export type EarlyInsightCard = {
+  key: EarlyInsightKey;
   title: string;
-  summary: string;
-  confidence: InsightConfidence;
+  accent: string;
+  detail: string;
+  accentTone: EarlyInsightTone;
+  status: EarlyInsightStatus;
   sampleSize: number;
   lastComputedAt: string;
 };
-
-export type OptimalSleepWindowMetrics = {
-  bedtimeBefore: string;
-  recoveryAbove: number;
-  avgRecoveryBeforeCutoff: number;
-  avgRecoveryAfterCutoff: number;
-  uplift: number;
-  sampleSize: number;
-  confidenceLabel: InsightConfidence;
-};
-
-export type RealSleepNeedMetrics = {
-  estimatedOptimalSleepMinutes: number;
-  estimatedOptimalSleepRangeMin: number;
-  estimatedOptimalSleepRangeMax: number;
-  currentAvgSleepMinutes: number;
-  deltaMinutes: number;
-  sampleSize: number;
-  confidenceLabel: InsightConfidence;
-};
-
-export type HrvBaselineMetrics = {
-  hrvBaseline: number;
-  hrvUsualLow: number;
-  hrvUsualHigh: number;
-  hrvOnBestRecoveryDays: number;
-  sampleSize: number;
-};
-
-export type RecoveryInsightMetrics = {
-  correlationHrvRecovery: number;
-  correlationSleepRecovery: number;
-  winner: "hrv" | "sleep" | "similar";
-};
-
-export type FactorInsightItem = {
-  key: string;
-  label: string;
-  effectSize: number;
-  sampleSize: number;
-  explanation: string;
-};
-
-export type RecoveryKillersMetrics = {
-  factors: FactorInsightItem[];
-  confidenceLabel: InsightConfidence;
-};
-
-export type BodyBatteryLeakMetrics = {
-  sleepThresholdHours: number;
-  avgRecoveryShortSleep: number;
-  avgRecoveryNormalSleep: number;
-  recoveryPenalty: number;
-};
-
-export type HrvBoostersMetrics = {
-  factors: FactorInsightItem[];
-  confidenceLabel: InsightConfidence;
-};
-
-export type StrainToleranceMetrics = {
-  strainToleranceThreshold: number;
-  thresholdMethod: string;
-  sampleSize: number;
-  confidenceLabel: InsightConfidence;
-};
-
-export type RecoverySpeedMetrics = {
-  avgDaysToRecover: number;
-  highStrainThresholdUsed: number;
-  recoveryThresholdUsed: number;
-  sampleSize: number;
-  confidenceLabel: InsightConfidence;
-};
-
-export type EarlyInsightCard =
-  | (InsightCardBase & { key: "optimal_sleep_window"; metrics: OptimalSleepWindowMetrics | null })
-  | (InsightCardBase & { key: "real_sleep_need"; metrics: RealSleepNeedMetrics | null })
-  | (InsightCardBase & { key: "hrv_baseline"; metrics: HrvBaselineMetrics | null })
-  | (InsightCardBase & { key: "recovery_insight"; metrics: RecoveryInsightMetrics | null })
-  | (InsightCardBase & { key: "recovery_killers"; metrics: RecoveryKillersMetrics | null })
-  | (InsightCardBase & { key: "body_battery_leak"; metrics: BodyBatteryLeakMetrics | null })
-  | (InsightCardBase & { key: "hrv_boosters"; metrics: HrvBoostersMetrics | null })
-  | (InsightCardBase & { key: "strain_tolerance"; metrics: StrainToleranceMetrics | null })
-  | (InsightCardBase & { key: "recovery_speed"; metrics: RecoverySpeedMetrics | null });
 
 type DailyMetricRow = {
   metric_date: string;
@@ -126,6 +42,12 @@ type SleepFactRow = {
   nap: boolean;
 };
 
+type JournalFactRow = {
+  cycle_start_at: string;
+  question_text: string;
+  answered_yes: boolean | null;
+};
+
 type SleepJoinedPoint = {
   wakeDate: string;
   sleepStartMinute: number;
@@ -137,51 +59,40 @@ type SleepJoinedPoint = {
   workoutsCount: number;
 };
 
-type CardFactory<TMetrics> = {
+type InsightBuilderResult = {
+  accent: string;
+  detail: string;
+  accentTone: EarlyInsightTone;
+  sampleSize: number;
+};
+
+type InsightBuilder = {
+  key: EarlyInsightKey;
   title: string;
-  fallbackSummary: string;
-  build: () => { summary: string; metrics: TMetrics; sampleSize: number; confidence: InsightConfidence };
+  fallbackAccent: string;
+  fallbackDetail: string;
+  fallbackTone?: EarlyInsightTone;
+  build: () => InsightBuilderResult;
 };
 
 const MINUTES_IN_DAY = 24 * 60;
-const RECOVERY_GOOD_THRESHOLD = 67;
-const RECOVERY_MATCH_MIN = 14;
+const RECOVERY_GREEN_MIN = 67;
+const RECOVERY_YELLOW_MIN = 34;
 const OPTIMAL_SLEEP_BUCKET_MINUTES = 30;
 const OPTIMAL_SLEEP_MIN_GROUP = 4;
 const OPTIMAL_SLEEP_LATEST_REASONABLE_CUTOFF = 25 * 60;
 const BODY_BATTERY_MIN_GROUP = 5;
 const BODY_BATTERY_MIN_PENALTY = 3;
+const DAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const DAY_NAMES_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+const EARLY_INSIGHTS_LOOKBACK_DAYS = 180;
+const EARLY_INSIGHTS_TAG_PREFIX = "user-early-insights";
 
 const clampRound = (value: number, decimals = 0) => Number(value.toFixed(decimals));
 
-const minutesToClock = (minuteOfDay: number): string => {
-  const safeMinute = ((minuteOfDay % MINUTES_IN_DAY) + MINUTES_IN_DAY) % MINUTES_IN_DAY;
-  const hours = Math.floor(safeMinute / 60);
-  const minutes = safeMinute % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-};
-
-const minutesToDurationText = (minutes: number): string => {
-  const rounded = Math.round(minutes / 15) * 15;
-  const h = Math.floor(rounded / 60);
-  const m = rounded % 60;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
-};
-
-const formatHoursCompact = (hours: number): string => {
-  if (Math.abs(hours - Math.round(hours)) < 0.01) {
-    return `${Math.round(hours)}h`;
-  }
-
-  return `${hours.toFixed(1)}h`;
-};
-
-const isoToUtcDate = (iso: string): string => new Date(iso).toISOString().slice(0, 10);
-
-const isoToUtcMinuteOfDay = (iso: string): number => {
-  const d = new Date(iso);
-  return d.getUTCHours() * 60 + d.getUTCMinutes();
+const average = (values: number[]): number => {
+  if (values.length === 0) return Number.NaN;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 };
 
 const percentile = (values: number[], p: number): number => {
@@ -195,104 +106,48 @@ const percentile = (values: number[], p: number): number => {
   return sorted[lower] + (sorted[upper] - sorted[lower]) * weight;
 };
 
-const median = (values: number[]): number => percentile(values, 0.5);
+const isoToUtcDate = (iso: string): string => new Date(iso).toISOString().slice(0, 10);
 
-const average = (values: number[]): number => {
-  if (values.length === 0) return Number.NaN;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
+const isoToUtcMinuteOfDay = (iso: string): number => {
+  const d = new Date(iso);
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
 };
 
-const pearsonCorrelation = (xs: number[], ys: number[]): number => {
-  if (xs.length !== ys.length || xs.length < 2) return Number.NaN;
-
-  const meanX = average(xs);
-  const meanY = average(ys);
-  let numerator = 0;
-  let sumSquareX = 0;
-  let sumSquareY = 0;
-
-  for (let index = 0; index < xs.length; index += 1) {
-    const xDiff = xs[index] - meanX;
-    const yDiff = ys[index] - meanY;
-    numerator += xDiff * yDiff;
-    sumSquareX += xDiff * xDiff;
-    sumSquareY += yDiff * yDiff;
-  }
-
-  const denominator = Math.sqrt(sumSquareX * sumSquareY);
-  if (!Number.isFinite(denominator) || denominator === 0) return Number.NaN;
-
-  return numerator / denominator;
-};
 const adjustedSleepMinute = (minuteOfDay: number): number => {
   return minuteOfDay < 12 * 60 ? minuteOfDay + MINUTES_IN_DAY : minuteOfDay;
 };
 
-const sleepMinuteDistance = (a: number, b: number): number => {
-  const diff = Math.abs(adjustedSleepMinute(a) - adjustedSleepMinute(b));
-  return Math.min(diff, MINUTES_IN_DAY - (diff % MINUTES_IN_DAY));
+const minutesToClock = (minuteOfDay: number): string => {
+  const safeMinute = ((minuteOfDay % MINUTES_IN_DAY) + MINUTES_IN_DAY) % MINUTES_IN_DAY;
+  const hours = Math.floor(safeMinute / 60);
+  const minutes = safeMinute % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 };
 
-const confidenceFromN = (sampleSize: number, mediumAt: number, strongAt: number): InsightConfidence => {
-  if (sampleSize >= strongAt) return "Strong signal";
-  if (sampleSize >= mediumAt) return "Medium confidence";
-  return "Early estimate";
+const formatSignedPoints = (value: number): string => `${value >= 0 ? "+" : "-"}${Math.abs(Math.round(value))} pts`;
+const formatSignedMinutes = (value: number): string => `${value >= 0 ? "+" : "-"}${Math.abs(Math.round(value))} min`;
+const formatSignedMs = (value: number): string => `${value >= 0 ? "+" : "-"}${Math.abs(Math.round(value))} ms`;
+
+const formatThreshold = (value: number): string => {
+  return value % 1 === 0 ? value.toFixed(0) : value.toFixed(1);
 };
 
-const safeErrorMessage = (error: unknown): string => {
-  if (error instanceof Error && error.message) return error.message;
-  return "Unexpected analytics error";
+const formatWeekdayShort = (dayIndex: number): string => DAY_NAMES_SHORT[dayIndex];
+const formatWeekdayLong = (dayIndex: number): string => DAY_NAMES_LONG[dayIndex];
+
+const addDaysToDateString = (date: string, days: number): string => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 };
 
-const factorExplanation = (label: string, effectSize: number, outcomeLabel: string): string => {
-  const direction = effectSize < 0 ? "lower" : "higher";
-  return `${label} is associated with ${Math.abs(effectSize).toFixed(1)} ${outcomeLabel} ${direction} on average.`;
+const dayDiff = (a: string, b: string): number => {
+  const dateA = new Date(`${a}T00:00:00Z`).getTime();
+  const dateB = new Date(`${b}T00:00:00Z`).getTime();
+  return Math.round((dateA - dateB) / (1000 * 60 * 60 * 24));
 };
 
-const buildInsightCard = <TMetrics>(
-  key: InsightKey,
-  nowIso: string,
-  factory: CardFactory<TMetrics>,
-): EarlyInsightCard => {
-  try {
-    const result = factory.build();
-    return {
-      key,
-      status: "ok",
-      title: factory.title,
-      summary: result.summary,
-      confidence: result.confidence,
-      sampleSize: result.sampleSize,
-      lastComputedAt: nowIso,
-      metrics: result.metrics,
-    } as EarlyInsightCard;
-  } catch (error) {
-    const message = safeErrorMessage(error);
-    if (message === "insufficient_data") {
-      return {
-        key,
-        status: "insufficient_data",
-        title: factory.title,
-        summary: factory.fallbackSummary,
-        confidence: "Not enough data yet",
-        sampleSize: 0,
-        lastComputedAt: nowIso,
-        metrics: null,
-      } as EarlyInsightCard;
-    }
-
-    return {
-      key,
-      status: "error",
-      title: factory.title,
-      summary: "We hit an error while calculating this insight. Please try again after your next upload.",
-      confidence: "Not enough data yet",
-      sampleSize: 0,
-      lastComputedAt: nowIso,
-      metrics: null,
-    } as EarlyInsightCard;
-  }
-};
+const getWeekdayIndex = (date: string): number => new Date(`${date}T00:00:00Z`).getUTCDay();
 
 const getPrimarySleepPerDate = (rows: SleepFactRow[]): Map<string, SleepFactRow> => {
   const map = new Map<string, SleepFactRow>();
@@ -317,32 +172,64 @@ const getPrimarySleepPerDate = (rows: SleepFactRow[]): Map<string, SleepFactRow>
   return map;
 };
 
-const topN = <T>(items: T[], n: number): T[] => items.slice(0, n);
+const buildInsightCard = (nowIso: string, builder: InsightBuilder): EarlyInsightCard => {
+  try {
+    const built = builder.build();
+    return {
+      key: builder.key,
+      title: builder.title,
+      accent: built.accent,
+      detail: built.detail,
+      accentTone: built.accentTone,
+      status: "ok",
+      sampleSize: built.sampleSize,
+      lastComputedAt: nowIso,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected analytics error";
+    return {
+      key: builder.key,
+      title: builder.title,
+      accent: builder.fallbackAccent,
+      detail: message === "insufficient_data" ? builder.fallbackDetail : "We need a bit more clean data before this insight can show up",
+      accentTone: builder.fallbackTone ?? "neutral",
+      status: message === "insufficient_data" ? "insufficient_data" : "error",
+      sampleSize: 0,
+      lastComputedAt: nowIso,
+    };
+  }
+};
 
 export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsightCard[]> => {
+  const loadUserEarlyInsights = async (): Promise<EarlyInsightCard[]> => {
   const supabase = await createSupabaseServerClient();
   const nowIso = new Date().toISOString();
+  const lookbackStart = addDaysToDateString(nowIso.slice(0, 10), -(EARLY_INSIGHTS_LOOKBACK_DAYS - 1));
 
-  const [dailyRes, sleepsRes] = await Promise.all([
+  const [dailyRes, sleepsRes, journalRes] = await Promise.all([
     supabase
       .from("user_daily_metrics")
       .select("metric_date, recovery_score_pct, hrv_ms, day_strain, workouts_count")
       .eq("user_id", userId)
+      .gte("metric_date", lookbackStart)
       .order("metric_date", { ascending: true }),
     supabase
       .from("whoop_sleep_facts")
       .select("sleep_onset_at, wake_onset_at, asleep_duration_min, sleep_consistency_percent, nap")
       .eq("user_id", userId)
+      .gte("wake_onset_at", `${lookbackStart}T00:00:00.000Z`)
       .order("wake_onset_at", { ascending: true }),
+    supabase
+      .from("whoop_journal_facts")
+      .select("cycle_start_at, question_text, answered_yes")
+      .eq("user_id", userId)
+      .gte("cycle_start_at", `${lookbackStart}T00:00:00.000Z`)
+      .order("cycle_start_at", { ascending: true }),
   ]);
 
-  if (dailyRes.error) {
-    throw new Error(`Failed to load daily metrics: ${dailyRes.error.message}`);
-  }
-
-  if (sleepsRes.error) {
-    throw new Error(`Failed to load sleep facts: ${sleepsRes.error.message}`);
-  }
+  if (dailyRes.error) throw new Error(`Failed to load daily metrics: ${dailyRes.error.message}`);
+  if (sleepsRes.error) throw new Error(`Failed to load sleep facts: ${sleepsRes.error.message}`);
+  if (journalRes.error) throw new Error(`Failed to load journal facts: ${journalRes.error.message}`);
 
   const dailyRows = ((dailyRes.data ?? []) as DailyMetricRow[]).map((row) => ({
     ...row,
@@ -353,6 +240,8 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
   }));
 
   const sleepRows = (sleepsRes.data ?? []) as SleepFactRow[];
+  const journalRows = (journalRes.data ?? []) as JournalFactRow[];
+
   const dailyByDate = new Map<string, DailyMetricRow>();
   for (const row of dailyRows) {
     dailyByDate.set(row.metric_date, row);
@@ -375,172 +264,117 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
     });
   }
 
-  const cards: EarlyInsightCard[] = [];
+  const builders: InsightBuilder[] = [
+    {
+      key: "sober_streak_effect",
+      title: "Sober streak effect",
+      fallbackAccent: "SOON",
+      fallbackDetail: "We need more alcohol journal history to estimate this effect",
+      fallbackTone: "green",
+      build: () => {
+        const alcoholRows = journalRows
+          .filter((row) => row.answered_yes != null && row.question_text.toLowerCase().includes("alcohol"))
+          .map((row) => ({
+            date: isoToUtcDate(row.cycle_start_at),
+            drankAlcohol: row.answered_yes === true,
+          }))
+          .sort((a, b) => a.date.localeCompare(b.date));
 
-  cards.push(
-    buildInsightCard("optimal_sleep_window", nowIso, {
+        if (alcoholRows.length < 8) throw new Error("insufficient_data");
+
+        const recoveryWithStreak: number[] = [];
+        const recoveryAfterAlcohol: number[] = [];
+        let soberStreak = 0;
+        let previousDate: string | null = null;
+
+        for (const row of alcoholRows) {
+          if (previousDate && dayDiff(row.date, previousDate) !== 1) {
+            soberStreak = 0;
+          }
+
+          soberStreak = row.drankAlcohol ? 0 : soberStreak + 1;
+          const recovery = dailyByDate.get(row.date)?.recovery_score_pct ?? null;
+
+          if (recovery != null) {
+            if (soberStreak >= 2) recoveryWithStreak.push(recovery);
+            if (row.drankAlcohol) recoveryAfterAlcohol.push(recovery);
+          }
+
+          previousDate = row.date;
+        }
+
+        if (recoveryWithStreak.length < 3 || recoveryAfterAlcohol.length < 3) throw new Error("insufficient_data");
+
+        const uplift = Math.round(average(recoveryWithStreak) - average(recoveryAfterAlcohol));
+        if (uplift <= 0) throw new Error("insufficient_data");
+
+        return {
+          accent: formatSignedPoints(uplift),
+          detail: `When you skip alcohol for 2+ days, your recovery is ~${uplift} points higher`,
+          accentTone: "green",
+          sampleSize: recoveryWithStreak.length + recoveryAfterAlcohol.length,
+        };
+      },
+    },
+    {
+      key: "optimal_sleep_cutoff",
       title: "Optimal sleep cutoff",
-      fallbackSummary: "We need more sleep history to estimate your best bedtime cutoff.",
+      fallbackAccent: "SOON",
+      fallbackDetail: "We need more sleep history to estimate your best bedtime cutoff",
       build: () => {
         const rows = sleepJoined.filter((row) => row.recovery != null);
         if (rows.length < 12) throw new Error("insufficient_data");
 
-        const candidateCutoffs = [...new Set([
-          ...rows
-            .map((row) =>
-              Math.floor(adjustedSleepMinute(row.sleepStartMinute) / OPTIMAL_SLEEP_BUCKET_MINUTES) * OPTIMAL_SLEEP_BUCKET_MINUTES + OPTIMAL_SLEEP_BUCKET_MINUTES,
-            )
+        const candidateCutoffs = [...new Set(
+          rows
+            .map((row) => Math.floor(adjustedSleepMinute(row.sleepStartMinute) / OPTIMAL_SLEEP_BUCKET_MINUTES) * OPTIMAL_SLEEP_BUCKET_MINUTES + OPTIMAL_SLEEP_BUCKET_MINUTES)
             .filter((cutoffMinute) => cutoffMinute <= OPTIMAL_SLEEP_LATEST_REASONABLE_CUTOFF),
-          OPTIMAL_SLEEP_LATEST_REASONABLE_CUTOFF,
-        ])].sort((a, b) => a - b);
+        )].sort((a, b) => a - b);
 
-        const ranked = candidateCutoffs
-          .map((cutoffMinute) => {
-            const beforeRows = rows.filter(
-              (row) => adjustedSleepMinute(row.sleepStartMinute) < cutoffMinute,
-            );
-            const afterRows = rows.filter(
-              (row) => adjustedSleepMinute(row.sleepStartMinute) >= cutoffMinute,
-            );
-
-            if (beforeRows.length < OPTIMAL_SLEEP_MIN_GROUP || afterRows.length < OPTIMAL_SLEEP_MIN_GROUP) {
-              return null;
+        let winner:
+          | {
+              cutoffMinute: number;
+              avgRecoveryBeforeCutoff: number;
+              avgRecoveryAfterCutoff: number;
+              uplift: number;
             }
+          | null = null;
 
-            const avgRecoveryBeforeCutoff = average(beforeRows.map((row) => row.recovery as number));
-            const avgRecoveryAfterCutoff = average(afterRows.map((row) => row.recovery as number));
-            const uplift = avgRecoveryBeforeCutoff - avgRecoveryAfterCutoff;
+        for (const cutoffMinute of candidateCutoffs) {
+          const beforeRows = rows.filter((row) => adjustedSleepMinute(row.sleepStartMinute) < cutoffMinute);
+          const afterRows = rows.filter((row) => adjustedSleepMinute(row.sleepStartMinute) >= cutoffMinute);
 
-            return {
-              cutoffMinute,
-              beforeSampleSize: beforeRows.length,
-              avgRecoveryBeforeCutoff,
-              avgRecoveryAfterCutoff,
-              uplift,
-            };
-          })
-          .filter((item): item is NonNullable<typeof item> => item !== null)
-          .sort(
-            (a, b) =>
-              b.uplift - a.uplift ||
-              b.avgRecoveryBeforeCutoff - a.avgRecoveryBeforeCutoff ||
-              b.beforeSampleSize - a.beforeSampleSize ||
-              a.cutoffMinute - b.cutoffMinute,
-          );
+          if (beforeRows.length < OPTIMAL_SLEEP_MIN_GROUP || afterRows.length < OPTIMAL_SLEEP_MIN_GROUP) continue;
 
-        const winner = ranked[0];
+          const avgRecoveryBeforeCutoff = average(beforeRows.map((row) => row.recovery as number));
+          const avgRecoveryAfterCutoff = average(afterRows.map((row) => row.recovery as number));
+          const uplift = avgRecoveryBeforeCutoff - avgRecoveryAfterCutoff;
+
+          if (!winner || uplift > winner.uplift) {
+            winner = { cutoffMinute, avgRecoveryBeforeCutoff, avgRecoveryAfterCutoff, uplift };
+          }
+        }
+
         if (!winner) throw new Error("insufficient_data");
 
-        const bedtimeBefore = minutesToClock(Math.min(winner.cutoffMinute, OPTIMAL_SLEEP_LATEST_REASONABLE_CUTOFF) % MINUTES_IN_DAY);
-        const avgRecoveryBeforeCutoff = clampRound(winner.avgRecoveryBeforeCutoff, 1);
-        const avgRecoveryAfterCutoff = clampRound(winner.avgRecoveryAfterCutoff, 1);
-        const avgRecoveryAfterCutoffRounded = Math.round(winner.avgRecoveryAfterCutoff);
+        const bedtimeBefore = minutesToClock(winner.cutoffMinute % MINUTES_IN_DAY);
         const recoveryAbove = Math.floor(winner.avgRecoveryBeforeCutoff);
-        const uplift = clampRound(winner.uplift, 1);
-        const confidence = confidenceFromN(rows.length, 18, 30);
+        const recoveryAfter = Math.round(winner.avgRecoveryAfterCutoff);
 
         return {
-          summary: `Your recovery is usually ${recoveryAbove}+ when you're asleep before ${bedtimeBefore}.\nWhen you go later, it drops to ${avgRecoveryAfterCutoffRounded} on average.`,
-          confidence,
+          accent: bedtimeBefore,
+          detail: `Your recovery is usually ${recoveryAbove}+ when you're asleep before ${bedtimeBefore}. When you go later, it drops to ${recoveryAfter} on average`,
+          accentTone: "neutral",
           sampleSize: rows.length,
-          metrics: {
-            bedtimeBefore,
-            recoveryAbove,
-            avgRecoveryBeforeCutoff,
-            avgRecoveryAfterCutoff,
-            uplift,
-            sampleSize: winner.beforeSampleSize,
-            confidenceLabel: confidence,
-          },
         };
       },
-    }),
-  );
-  cards.push(
-    buildInsightCard("real_sleep_need", nowIso, {
-      title: "Real sleep need",
-      fallbackSummary: "We need a bit more sleep data to estimate your ideal sleep duration.",
-      build: () => {
-        const rows = sleepJoined.filter((row) => row.sleepDurationMin != null && (row.recovery != null || row.hrv != null));
-        if (rows.length < 10) throw new Error("insufficient_data");
-
-        const durations = rows.map((row) => row.sleepDurationMin as number);
-        const currentAvgSleep = average(durations);
-        const recoverySamples = rows.filter((row) => row.recovery != null).length;
-        const hrvSamples = rows.filter((row) => row.hrv != null).length;
-        const useRecovery = recoverySamples >= 10 || recoverySamples >= hrvSamples;
-        const hrvBaseline = median(rows.map((row) => row.hrv).filter((value): value is number => value != null));
-
-        const bucketSize = 30;
-        const byBucket = new Map<number, { durations: number[]; recovery: number[]; hrv: number[] }>();
-        for (const row of rows) {
-          const duration = row.sleepDurationMin as number;
-          const bucket = Math.floor(duration / bucketSize) * bucketSize;
-          const item = byBucket.get(bucket) ?? { durations: [], recovery: [], hrv: [] };
-          item.durations.push(duration);
-          if (row.recovery != null) item.recovery.push(row.recovery);
-          if (row.hrv != null) item.hrv.push(row.hrv);
-          byBucket.set(bucket, item);
-        }
-
-        const bins = [...byBucket.entries()].map(([bucketMin, value]) => {
-          const recoveryAvg = value.recovery.length ? average(value.recovery) : Number.NaN;
-          const hrvAvg = value.hrv.length ? average(value.hrv) : Number.NaN;
-          const normalizedHrv = Number.isNaN(hrvAvg) || Number.isNaN(hrvBaseline) || hrvBaseline <= 0 ? Number.NaN : hrvAvg / hrvBaseline;
-          const score = useRecovery ? recoveryAvg : Number.isNaN(normalizedHrv) ? Number.NaN : normalizedHrv;
-
-          return {
-            bucketMin,
-            sampleSize: value.durations.length,
-            score,
-            avgDuration: average(value.durations),
-          };
-        });
-
-        const eligibleBins = bins
-          .filter((bin) => bin.sampleSize >= 3 && Number.isFinite(bin.score))
-          .sort((a, b) => b.score - a.score || b.sampleSize - a.sampleSize);
-
-        if (eligibleBins.length < 1 || bins.filter((bin) => bin.sampleSize >= 2).length < 3) {
-          throw new Error("insufficient_data");
-        }
-
-        const winner = eligibleBins[0];
-        const optimalMin = Math.round(winner.avgDuration / 15) * 15;
-        const delta = Math.round(optimalMin - currentAvgSleep);
-        const confidence = confidenceFromN(rows.length, 18, 32);
-
-        let summary = `Your body wants about ${minutesToDurationText(optimalMin)} of sleep.`;
-        if (delta > 0) {
-          summary += `\nYou're giving it ${minutesToDurationText(delta)} less.`;
-        } else if (delta < -15) {
-          summary += `\nYou're giving it ${minutesToDurationText(Math.abs(delta))} more.`;
-        } else {
-          summary += "\nYou're already pretty close.";
-        }
-
-        return {
-          summary,
-          confidence,
-          sampleSize: rows.length,
-          metrics: {
-            estimatedOptimalSleepMinutes: optimalMin,
-            estimatedOptimalSleepRangeMin: winner.bucketMin,
-            estimatedOptimalSleepRangeMax: winner.bucketMin + bucketSize,
-            currentAvgSleepMinutes: Math.round(currentAvgSleep),
-            deltaMinutes: delta,
-            sampleSize: rows.length,
-            confidenceLabel: confidence,
-          },
-        };
-      },
-    }),
-  );
-
-  cards.push(
-    buildInsightCard("body_battery_leak", nowIso, {
-      title: "Your body battery leak",
-      fallbackSummary: "We need more short-sleep nights to estimate your next-day recovery penalty.",
+    },
+    {
+      key: "body_battery_leak",
+      title: "Body battery leak",
+      fallbackAccent: "SOON",
+      fallbackDetail: "We need more short-sleep nights to estimate your next-day recovery penalty",
+      fallbackTone: "red",
       build: () => {
         const rows = sleepJoined.filter((row) => row.sleepDurationMin != null && row.recovery != null);
         if (rows.length < 12) throw new Error("insufficient_data");
@@ -562,278 +396,33 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
 
         if (!bestSplit) throw new Error("insufficient_data");
 
-        const avgRecoveryShortSleep = average(bestSplit.shortRecoveries);
-        const avgRecoveryNormalSleep = average(bestSplit.normalRecoveries);
-        const recoveryPenalty = Math.round(avgRecoveryNormalSleep - avgRecoveryShortSleep);
-        const confidence = confidenceFromN(bestSplit.shortRecoveries.length + bestSplit.normalRecoveries.length, 18, 30);
-        const summary = recoveryPenalty > BODY_BATTERY_MIN_PENALTY
-          ? `Your body loses ~${recoveryPenalty} recovery points after nights with less than ${formatHoursCompact(bestSplit.thresholdHours)} of sleep.`
-          : "Short sleep has only a small visible effect on your next-day recovery.";
+        const recoveryPenalty = Math.round(average(bestSplit.normalRecoveries) - average(bestSplit.shortRecoveries));
+        if (recoveryPenalty <= BODY_BATTERY_MIN_PENALTY) throw new Error("insufficient_data");
+
+        const thresholdText = Math.abs(bestSplit.thresholdHours - Math.round(bestSplit.thresholdHours)) < 0.01
+          ? `${Math.round(bestSplit.thresholdHours)}h`
+          : `${bestSplit.thresholdHours.toFixed(1)}h`;
 
         return {
-          summary,
-          confidence,
+          accent: formatSignedPoints(-recoveryPenalty),
+          detail: `Your body loses ~${recoveryPenalty} recovery points after nights with less than ${thresholdText} of sleep`,
+          accentTone: "red",
           sampleSize: bestSplit.shortRecoveries.length + bestSplit.normalRecoveries.length,
-          metrics: {
-            sleepThresholdHours: bestSplit.thresholdHours,
-            avgRecoveryShortSleep: clampRound(avgRecoveryShortSleep, 1),
-            avgRecoveryNormalSleep: clampRound(avgRecoveryNormalSleep, 1),
-            recoveryPenalty,
-          },
         };
       },
-    }),
-  );
-
-  cards.push(
-    buildInsightCard("hrv_baseline", nowIso, {
-      title: "Your HRV baseline",
-      fallbackSummary: "We need more HRV history to estimate your personal baseline.",
-      build: () => {
-        const validHrvRows = dailyRows.filter((row) => row.hrv_ms != null);
-        if (validHrvRows.length < 7) throw new Error("insufficient_data");
-
-        const hrvValues = validHrvRows.map((row) => row.hrv_ms as number);
-        const baseline = median(hrvValues);
-        const low = percentile(hrvValues, 0.25);
-        const high = percentile(hrvValues, 0.75);
-        const recoveryValues = dailyRows.map((row) => row.recovery_score_pct).filter((value): value is number => value != null);
-        const bestRecoveryCutoff = recoveryValues.length ? percentile(recoveryValues, 0.75) : RECOVERY_GOOD_THRESHOLD;
-        const bestRecoveryHrv = dailyRows
-          .filter((row) => row.hrv_ms != null && row.recovery_score_pct != null && row.recovery_score_pct >= bestRecoveryCutoff)
-          .map((row) => row.hrv_ms as number);
-        const bestRecoveryHrvAvg = bestRecoveryHrv.length ? average(bestRecoveryHrv) : baseline;
-        const confidence = confidenceFromN(validHrvRows.length, 14, 30);
-
-        return {
-          summary: `Your usual HRV: ${Math.round(baseline)} ms\nBest days: ${Math.round(bestRecoveryHrvAvg)} ms`,
-          confidence,
-          sampleSize: validHrvRows.length,
-          metrics: {
-            hrvBaseline: Math.round(baseline),
-            hrvUsualLow: Math.round(low),
-            hrvUsualHigh: Math.round(high),
-            hrvOnBestRecoveryDays: Math.round(bestRecoveryHrvAvg),
-            sampleSize: validHrvRows.length,
-          },
-        };
-      },
-    }),
-  );
-
-  cards.push(
-    buildInsightCard("hrv_boosters", nowIso, {
-      title: "What boosts your HRV",
-      fallbackSummary: "We need more history before we can spot your strongest HRV patterns.",
-      build: () => {
-        const rows = sleepJoined.filter((row) => row.hrv != null && row.sleepDurationMin != null);
-        if (rows.length < 12) throw new Error("insufficient_data");
-
-        const sleepDurations = rows.map((row) => row.sleepDurationMin as number);
-        const starts = rows.map((row) => row.sleepStartMinute);
-        const strains = rows.map((row) => row.strain).filter((value): value is number => value != null);
-        const medianDuration = median(sleepDurations);
-        const medianStart = median(starts.map(adjustedSleepMinute)) % MINUTES_IN_DAY;
-        const strainP40 = strains.length >= 6 ? percentile(strains, 0.4) : Number.NaN;
-        const strainP70 = strains.length >= 6 ? percentile(strains, 0.7) : Number.NaN;
-
-        const factorDefs = [
-          { key: "consistent_sleep_timing", label: "Consistent sleep timing", test: (row: SleepJoinedPoint) => sleepMinuteDistance(row.sleepStartMinute, medianStart) <= 45 },
-          { key: "longer_sleep", label: "Longer sleep", test: (row: SleepJoinedPoint) => (row.sleepDurationMin as number) >= medianDuration + 30 },
-          { key: "earlier_sleep", label: "Earlier sleep", test: (row: SleepJoinedPoint) => adjustedSleepMinute(row.sleepStartMinute) <= adjustedSleepMinute(medianStart) - 60 },
-          {
-            key: "moderate_strain",
-            label: "Moderate strain",
-            test: (row: SleepJoinedPoint) => row.strain != null && Number.isFinite(strainP40) && Number.isFinite(strainP70) && row.strain >= strainP40 && row.strain <= strainP70,
-          },
-        ] as const;
-
-        const factors: FactorInsightItem[] = [];
-        for (const factor of factorDefs) {
-          const yes = rows.filter((row) => factor.test(row)).map((row) => row.hrv as number);
-          const no = rows.filter((row) => !factor.test(row)).map((row) => row.hrv as number);
-          if (yes.length < 3 || no.length < 3) continue;
-
-          const effect = average(yes) - average(no);
-          if (effect <= 1) continue;
-
-          factors.push({
-            key: factor.key,
-            label: factor.label,
-            effectSize: clampRound(effect, 1),
-            sampleSize: yes.length,
-            explanation: factorExplanation(factor.label, effect, "HRV points"),
-          });
-        }
-
-        factors.sort((a, b) => b.effectSize - a.effectSize);
-        const topFactors = topN(factors, 3);
-        if (topFactors.length < 2) throw new Error("insufficient_data");
-
-        const confidence = confidenceFromN(rows.length, 18, 32);
-        return {
-          summary: "Your HRV usually looks better when:",
-          confidence,
-          sampleSize: rows.length,
-          metrics: { factors: topFactors, confidenceLabel: confidence },
-        };
-      },
-    }),
-  );
-
-  cards.push(
-    buildInsightCard("recovery_speed", nowIso, {
-      title: "Your recovery speed",
-      fallbackSummary: "We need more high-strain history to estimate your recovery speed.",
-      build: () => {
-        const rows = dailyRows.filter((row) => row.day_strain != null && row.recovery_score_pct != null).sort((a, b) => a.metric_date.localeCompare(b.metric_date));
-        if (rows.length < 10) throw new Error("insufficient_data");
-
-        const strains = rows.map((row) => row.day_strain as number);
-        const recoveries = rows.map((row) => row.recovery_score_pct as number);
-        const highStrainThreshold = Math.max(14, percentile(strains, 0.75));
-        const recoveryThreshold = Math.max(RECOVERY_GOOD_THRESHOLD, percentile(recoveries, 0.5));
-        const eventIndexes = rows.map((row, index) => ({ row, index })).filter(({ row }) => (row.day_strain as number) >= highStrainThreshold).map(({ index }) => index);
-        if (eventIndexes.length < 5) throw new Error("insufficient_data");
-
-        const daysToRecover: number[] = [];
-        for (const startIndex of eventIndexes) {
-          const startDate = new Date(rows[startIndex].metric_date);
-          for (let nextIndex = startIndex + 1; nextIndex < rows.length; nextIndex += 1) {
-            if ((rows[nextIndex].recovery_score_pct as number) >= recoveryThreshold) {
-              const nextDate = new Date(rows[nextIndex].metric_date);
-              daysToRecover.push(Math.round((nextDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
-              break;
-            }
-          }
-        }
-
-        if (daysToRecover.length < 3) throw new Error("insufficient_data");
-
-        const avgDays = average(daysToRecover);
-        const confidence = eventIndexes.length >= 10 && daysToRecover.length >= 6 ? "Strong signal" : eventIndexes.length >= 7 && daysToRecover.length >= 4 ? "Medium confidence" : "Early estimate";
-
-        return {
-          summary: `After intense days, your body recovers in ~${avgDays.toFixed(1)} days.`,
-          confidence,
-          sampleSize: eventIndexes.length,
-          metrics: {
-            avgDaysToRecover: clampRound(avgDays, 1),
-            highStrainThresholdUsed: clampRound(highStrainThreshold, 1),
-            recoveryThresholdUsed: clampRound(recoveryThreshold, 1),
-            sampleSize: eventIndexes.length,
-            confidenceLabel: confidence,
-          },
-        };
-      },
-    }),
-  );
-
-  cards.push(
-    buildInsightCard("recovery_insight", nowIso, {
-      title: "Recovery insight",
-      fallbackSummary: "We need more matched recovery, HRV, and sleep data to compare your strongest signal.",
-      build: () => {
-        const rows = sleepJoined.filter((row) => row.recovery != null && row.hrv != null && row.sleepDurationMin != null);
-        if (rows.length < RECOVERY_MATCH_MIN) throw new Error("insufficient_data");
-
-        const recoveryValues = rows.map((row) => row.recovery as number);
-        const correlationHrvRecovery = pearsonCorrelation(rows.map((row) => row.hrv as number), recoveryValues);
-        const correlationSleepRecovery = pearsonCorrelation(rows.map((row) => row.sleepDurationMin as number), recoveryValues);
-        if (!Number.isFinite(correlationHrvRecovery) || !Number.isFinite(correlationSleepRecovery)) throw new Error("insufficient_data");
-
-        const absHrv = Math.abs(correlationHrvRecovery);
-        const absSleep = Math.abs(correlationSleepRecovery);
-        const winner = absHrv >= absSleep + 0.1 ? "hrv" : absSleep >= absHrv + 0.1 ? "sleep" : "similar";
-        const summary =
-          winner === "hrv"
-            ? "In your data, HRV affects recovery more than sleep length."
-            : winner === "sleep"
-              ? "In your data, sleep length affects recovery more than HRV."
-              : "In your data, HRV and sleep length have a similar impact on recovery.";
-        const confidence = confidenceFromN(rows.length, 20, 35);
-
-        return {
-          summary,
-          confidence,
-          sampleSize: rows.length,
-          metrics: {
-            correlationHrvRecovery: clampRound(correlationHrvRecovery, 2),
-            correlationSleepRecovery: clampRound(correlationSleepRecovery, 2),
-            winner,
-          },
-        };
-      },
-    }),
-  );
-
-  cards.push(
-    buildInsightCard("recovery_killers", nowIso, {
-      title: "TOP Recovery killers",
-      fallbackSummary: "We need more history before we can spot your strongest recovery patterns.",
-      build: () => {
-        const rows = sleepJoined.filter((row) => row.recovery != null && row.sleepDurationMin != null);
-        if (rows.length < 12) throw new Error("insufficient_data");
-
-        const sleepDurations = rows.map((row) => row.sleepDurationMin as number);
-        const starts = rows.map((row) => row.sleepStartMinute);
-        const strains = rows.map((row) => row.strain).filter((value): value is number => value != null);
-        const medianDuration = median(sleepDurations);
-        const medianStart = median(starts.map(adjustedSleepMinute)) % MINUTES_IN_DAY;
-        const strainP75 = strains.length >= 6 ? percentile(strains, 0.75) : Number.NaN;
-
-        const factorDefs = [
-          { key: "late_sleep", label: "Late sleep", test: (row: SleepJoinedPoint) => adjustedSleepMinute(row.sleepStartMinute) > adjustedSleepMinute(medianStart) + 60 },
-          { key: "irregular_bedtime", label: "Irregular bedtime", test: (row: SleepJoinedPoint) => sleepMinuteDistance(row.sleepStartMinute, medianStart) > 90 },
-          { key: "short_sleep", label: "Short sleep", test: (row: SleepJoinedPoint) => (row.sleepDurationMin as number) < medianDuration - 30 },
-          { key: "high_strain", label: "High strain", test: (row: SleepJoinedPoint) => row.strain != null && Number.isFinite(strainP75) && row.strain >= strainP75 },
-        ] as const;
-
-        const factors: FactorInsightItem[] = [];
-        for (const factor of factorDefs) {
-          const yes = rows.filter((row) => factor.test(row)).map((row) => row.recovery as number);
-          const no = rows.filter((row) => !factor.test(row)).map((row) => row.recovery as number);
-          if (yes.length < 3 || no.length < 3) continue;
-
-          const effect = average(yes) - average(no);
-          if (effect >= -2) continue;
-
-          factors.push({
-            key: factor.key,
-            label: factor.label,
-            effectSize: clampRound(effect, 1),
-            sampleSize: yes.length,
-            explanation: factorExplanation(factor.label, effect, "recovery points"),
-          });
-        }
-
-        factors.sort((a, b) => a.effectSize - b.effectSize);
-        const topFactors = topN(factors, 3);
-        if (topFactors.length < 2) throw new Error("insufficient_data");
-
-        const confidence = confidenceFromN(rows.length, 18, 32);
-        return {
-          summary: "The patterns that usually drag down your recovery:",
-          confidence,
-          sampleSize: rows.length,
-          metrics: { factors: topFactors, confidenceLabel: confidence },
-        };
-      },
-    }),
-  );
-
-  cards.push(
-    buildInsightCard("strain_tolerance", nowIso, {
+    },
+    {
+      key: "strain_limit",
       title: "Your strain limit",
-      fallbackSummary: "We need more varied strain data to estimate your tolerance.",
+      fallbackAccent: "SOON",
+      fallbackDetail: "We need more varied strain data to estimate your tolerance",
       build: () => {
         const rows = dailyRows.filter((row) => row.day_strain != null && row.recovery_score_pct != null);
         if (rows.length < 10) throw new Error("insufficient_data");
 
         const strains = rows.map((row) => row.day_strain as number);
-        const spread = percentile(strains, 0.75) - percentile(strains, 0.25);
-        const sortedThresholds = [...new Set(strains.map((v) => clampRound(v, 1)))].sort((a, b) => a - b);
-        let best: { threshold: number; drop: number } | null = null;
+        const sortedThresholds = [...new Set(strains.map((value) => clampRound(value, 1)))].sort((a, b) => a - b);
+        let bestThreshold: { threshold: number; drop: number } | null = null;
 
         for (const threshold of sortedThresholds) {
           const low = rows.filter((row) => (row.day_strain as number) <= threshold).map((row) => row.recovery_score_pct as number);
@@ -841,28 +430,223 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           if (low.length < 4 || high.length < 4) continue;
 
           const drop = average(high) - average(low);
-          if (!best || drop < best.drop) best = { threshold, drop };
+          if (!bestThreshold || drop < bestThreshold.drop) bestThreshold = { threshold, drop };
         }
 
-        const fallbackThreshold = clampRound(percentile(strains, 0.75), 1);
-        const threshold = best ? best.threshold : fallbackThreshold;
-        const thresholdMethod = best ? "best split by recovery drop across observed strain values" : "upper quartile of your observed strain";
-        const confidence = !best || spread < 2.5 ? "Early estimate" : rows.length >= 24 && best.drop <= -8 ? "Strong signal" : rows.length >= 14 && best.drop <= -6 ? "Medium confidence" : "Early estimate";
+        if (!bestThreshold) throw new Error("insufficient_data");
 
+        const threshold = formatThreshold(bestThreshold.threshold);
         return {
-          summary: `Your recovery starts dropping when strain goes above ~${threshold % 1 === 0 ? threshold.toFixed(0) : threshold.toFixed(1)}.`,
-          confidence,
+          accent: threshold,
+          detail: `Your recovery starts dropping when strain goes above ~${threshold}`,
+          accentTone: "neutral",
           sampleSize: rows.length,
-          metrics: {
-            strainToleranceThreshold: threshold,
-            thresholdMethod,
-            sampleSize: rows.length,
-            confidenceLabel: confidence,
-          },
         };
       },
-    }),
-  );
+    },
+    {
+      key: "recovery_speed",
+      title: "Recovery speed",
+      fallbackAccent: "SOON",
+      fallbackDetail: "We need more high-strain history to estimate your recovery speed",
+      build: () => {
+        const rows = dailyRows.filter((row) => row.day_strain != null && row.recovery_score_pct != null).sort((a, b) => a.metric_date.localeCompare(b.metric_date));
+        if (rows.length < 10) throw new Error("insufficient_data");
 
-  return cards;
+        const strains = rows.map((row) => row.day_strain as number);
+        const recoveries = rows.map((row) => row.recovery_score_pct as number);
+        const highStrainThreshold = Math.max(14, percentile(strains, 0.75));
+        const recoveryThreshold = Math.max(RECOVERY_GREEN_MIN, percentile(recoveries, 0.5));
+        const eventIndexes = rows.map((row, index) => ({ row, index })).filter(({ row }) => (row.day_strain as number) >= highStrainThreshold).map(({ index }) => index);
+        if (eventIndexes.length < 5) throw new Error("insufficient_data");
+
+        const daysToRecover: number[] = [];
+        for (const startIndex of eventIndexes) {
+          for (let nextIndex = startIndex + 1; nextIndex < rows.length; nextIndex += 1) {
+            if ((rows[nextIndex].recovery_score_pct as number) >= recoveryThreshold) {
+              daysToRecover.push(dayDiff(rows[nextIndex].metric_date, rows[startIndex].metric_date));
+              break;
+            }
+          }
+        }
+
+        if (daysToRecover.length < 3) throw new Error("insufficient_data");
+
+        const avgDays = clampRound(average(daysToRecover), 1);
+        return {
+          accent: `${avgDays.toFixed(1)} days`,
+          detail: `After intense days, your body recovers in ~${avgDays.toFixed(1)} days`,
+          accentTone: "neutral",
+          sampleSize: daysToRecover.length,
+        };
+      },
+    },
+    {
+      key: "best_worst_day",
+      title: "Best & worst day",
+      fallbackAccent: "SOON",
+      fallbackDetail: "We need more recovery history to spot your strongest weekday pattern",
+      build: () => {
+        const rows = dailyRows.filter((row) => row.recovery_score_pct != null);
+        if (rows.length < 14) throw new Error("insufficient_data");
+
+        const byWeekday = new Map<number, number[]>();
+        for (const row of rows) {
+          const weekday = getWeekdayIndex(row.metric_date);
+          const values = byWeekday.get(weekday) ?? [];
+          values.push(row.recovery_score_pct as number);
+          byWeekday.set(weekday, values);
+        }
+
+        const weekdayAverages = [...byWeekday.entries()]
+          .filter(([, values]) => values.length >= 2)
+          .map(([weekday, values]) => ({ weekday, avgRecovery: Math.round(average(values)), sampleSize: values.length }));
+
+        if (weekdayAverages.length < 4) throw new Error("insufficient_data");
+
+        const best = [...weekdayAverages].sort((a, b) => b.avgRecovery - a.avgRecovery)[0];
+        const worst = [...weekdayAverages].sort((a, b) => a.avgRecovery - b.avgRecovery)[0];
+
+        return {
+          accent: `${formatWeekdayShort(best.weekday)} / ${formatWeekdayShort(worst.weekday)}`,
+          detail: `Your best recovery day: ${formatWeekdayLong(best.weekday)} (avg ${best.avgRecovery}%). Your worst: ${formatWeekdayLong(worst.weekday)} (avg ${worst.avgRecovery}%)`,
+          accentTone: "neutral",
+          sampleSize: best.sampleSize + worst.sampleSize,
+        };
+      },
+    },
+    {
+      key: "hrv_threshold",
+      title: "HRV threshold",
+      fallbackAccent: "SOON",
+      fallbackDetail: "We need more matched HRV and next-day recovery data to estimate your threshold",
+      fallbackTone: "red",
+      build: () => {
+        const pairedRows = dailyRows
+          .map((row) => ({
+            hrv: row.hrv_ms,
+            nextDayRecovery: dailyByDate.get(addDaysToDateString(row.metric_date, 1))?.recovery_score_pct ?? null,
+          }))
+          .filter((row): row is { hrv: number; nextDayRecovery: number } => row.hrv != null && row.nextDayRecovery != null);
+
+        if (pairedRows.length < 12) throw new Error("insufficient_data");
+
+        const thresholds = [...new Set(pairedRows.map((row) => Math.round(row.hrv)))].sort((a, b) => a - b);
+        let bestSplit: { threshold: number; lowAvg: number; drop: number; lowCount: number; highCount: number } | null = null;
+
+        for (const threshold of thresholds) {
+          const low = pairedRows.filter((row) => row.hrv < threshold).map((row) => row.nextDayRecovery);
+          const high = pairedRows.filter((row) => row.hrv >= threshold).map((row) => row.nextDayRecovery);
+          if (low.length < 4 || high.length < 4) continue;
+
+          const lowAvg = average(low);
+          const drop = lowAvg - average(high);
+          if (!bestSplit || drop < bestSplit.drop) {
+            bestSplit = { threshold, lowAvg, drop, lowCount: low.length, highCount: high.length };
+          }
+        }
+
+        if (!bestSplit) throw new Error("insufficient_data");
+
+        return {
+          accent: `<${bestSplit.threshold} ms`,
+          detail: `When your HRV drops below ${bestSplit.threshold}, your next-day recovery averages ${Math.round(bestSplit.lowAvg)}% regardless of sleep`,
+          accentTone: "red",
+          sampleSize: bestSplit.lowCount + bestSplit.highCount,
+        };
+      },
+    },
+    {
+      key: "sleep_gap_days",
+      title: "Sleep gap days",
+      fallbackAccent: "SOON",
+      fallbackDetail: "We need more sleep history to spot your undersleep pattern by weekday",
+      fallbackTone: "red",
+      build: () => {
+        const rows = sleepJoined.filter((row) => row.sleepDurationMin != null);
+        if (rows.length < 10) throw new Error("insufficient_data");
+
+        const overallAverage = average(rows.map((row) => row.sleepDurationMin as number));
+        const byWeekday = new Map<number, number[]>();
+        for (const row of rows) {
+          const weekday = getWeekdayIndex(row.wakeDate);
+          const values = byWeekday.get(weekday) ?? [];
+          values.push(row.sleepDurationMin as number);
+          byWeekday.set(weekday, values);
+        }
+
+        const weekdayGaps = [...byWeekday.entries()]
+          .filter(([, values]) => values.length >= 1)
+          .map(([weekday, values]) => ({ weekday, avgSleep: average(values), deltaMinutes: average(values) - overallAverage }))
+          .sort((a, b) => a.deltaMinutes - b.deltaMinutes);
+
+        if (weekdayGaps.length < 2) throw new Error("insufficient_data");
+
+        const topTwo = weekdayGaps.slice(0, 2);
+        if (topTwo[0].deltaMinutes > -10) throw new Error("insufficient_data");
+
+        return {
+          accent: `${formatWeekdayShort(topTwo[0].weekday)} & ${formatWeekdayShort(topTwo[1].weekday)}`,
+          detail: `You consistently undersleep on ${formatWeekdayLong(topTwo[0].weekday)}s and ${formatWeekdayLong(topTwo[1].weekday)}s`,
+          accentTone: "red",
+          sampleSize: topTwo.length,
+        };
+      },
+    },
+    {
+      key: "recovery_streak",
+      title: "Recovery streak",
+      fallbackAccent: "SOON",
+      fallbackDetail: "We need more recovery history to summarize your recent streaks",
+      fallbackTone: "green",
+      build: () => {
+        const rows = dailyRows.filter((row) => row.recovery_score_pct != null).sort((a, b) => a.metric_date.localeCompare(b.metric_date));
+        if (rows.length < 10) throw new Error("insufficient_data");
+
+        const last90 = rows.slice(-90);
+        let green = 0;
+        let yellow = 0;
+        let red = 0;
+        let longestGreenStreak = 0;
+        let currentGreenStreak = 0;
+        let previousDate: string | null = null;
+
+        for (const row of last90) {
+          const recovery = row.recovery_score_pct as number;
+          if (recovery >= RECOVERY_GREEN_MIN) {
+            green += 1;
+            currentGreenStreak = previousDate && dayDiff(row.metric_date, previousDate) === 1 ? currentGreenStreak + 1 : 1;
+            longestGreenStreak = Math.max(longestGreenStreak, currentGreenStreak);
+          } else {
+            currentGreenStreak = 0;
+            if (recovery >= RECOVERY_YELLOW_MIN) {
+              yellow += 1;
+            } else {
+              red += 1;
+            }
+          }
+
+          previousDate = row.metric_date;
+        }
+
+        return {
+          accent: `${Math.max(longestGreenStreak, 1)} days`,
+          detail: `Last 90 days: ${green} green, ${yellow} yellow, ${red} red. Longest green streak: ${Math.max(longestGreenStreak, 1)} days`,
+          accentTone: "green",
+          sampleSize: last90.length,
+        };
+      },
+    },
+  ];
+
+    return builders.map((builder) => buildInsightCard(nowIso, builder));
+  };
+
+  return unstable_cache(loadUserEarlyInsights, [EARLY_INSIGHTS_TAG_PREFIX, userId], {
+    revalidate: 300,
+    tags: [`${EARLY_INSIGHTS_TAG_PREFIX}:${userId}`],
+  })();
 };
+
+export const revalidateUserEarlyInsights = (userId: string) =>
+  revalidateTag(`${EARLY_INSIGHTS_TAG_PREFIX}:${userId}`);

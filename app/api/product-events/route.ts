@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 
 import { isProductEventName } from "@/lib/product-events";
 import { trackProductEvent } from "@/lib/product-events-server";
+import { ensureValidMutationRequest } from "@/lib/security/mutation-guard";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 
 export async function POST(request: Request) {
+  const invalidRequestResponse = ensureValidMutationRequest(request);
+  if (invalidRequestResponse) {
+    return invalidRequestResponse;
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },

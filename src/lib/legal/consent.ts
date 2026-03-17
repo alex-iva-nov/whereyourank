@@ -7,7 +7,7 @@ import {
   REQUIRED_UPLOAD_CONSENT_TYPES,
   TERMS_VERSION,
   UPLOAD_PROCESSING_CONSENT_TEXT,
-} from "./constants";
+} from "./constants.ts";
 
 export type ConsentStatus = {
   hasRequiredConsent: boolean;

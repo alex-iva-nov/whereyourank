@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 
+import { revalidateUserEarlyInsights } from "@/lib/analytics/early-insights";
 import { deleteUserDataForMvp } from "@/lib/user/delete-data";
 import { supabaseAdmin } from "@/lib/supabase/admin-client";
 import { revalidateUserDataCount } from "@/lib/product/user-data-count";
+import { ensureValidMutationRequest } from "@/lib/security/mutation-guard";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server-client";
 
 export async function POST(request: Request) {
+  const invalidRequestResponse = ensureValidMutationRequest(request);
+  if (invalidRequestResponse) {
+    return invalidRequestResponse;
+  }
+
   const authResponse = NextResponse.next();
   const supabase = createSupabaseRouteHandlerClient(request, authResponse);
   const {
@@ -28,6 +35,7 @@ export async function POST(request: Request) {
     await supabase.auth.signOut();
 
     revalidateUserDataCount();
+    revalidateUserEarlyInsights(user.id);
 
     const response = NextResponse.json({ ok: true, result });
     authResponse.cookies.getAll().forEach((cookie) => {
