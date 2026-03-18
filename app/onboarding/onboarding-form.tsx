@@ -78,7 +78,7 @@ export function OnboardingForm() {
             <option key={option.code} value={option.name} />
           ))}
         </datalist>
-        <p style={{ margin: 0, color: "#a3adb4", fontSize: 13 }}>Use your country of residence.</p>
+        <p style={{ margin: 0, color: "#a3adb4", fontSize: 13 }}>Use your country of residence</p>
       </label>
 
       {error ? <p style={{ color: "#b00020", margin: 0 }}>{error}</p> : null}

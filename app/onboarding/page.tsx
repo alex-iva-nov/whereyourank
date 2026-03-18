@@ -42,9 +42,9 @@ export default async function OnboardingPage() {
             boxShadow: "0 28px 90px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255,255,255,0.03)",
           }}
         >
-          <BrandWordmark subtitle="A quick setup before your first benchmark." />
+          <BrandWordmark subtitle="A quick setup before your first benchmark" />
           <p style={{ margin: "26px 0 8px", color: "#aeb5bb", fontSize: 12, letterSpacing: "0.22em", textTransform: "uppercase", fontWeight: 700 }}>Profile setup</p>
-          <h1 style={{ margin: 0, fontSize: 58, lineHeight: 0.94, letterSpacing: "-0.06em", textTransform: "uppercase" }}>Complete your profile.</h1>
+          <h1 style={{ margin: 0, fontSize: 58, lineHeight: 0.94, letterSpacing: "-0.06em", textTransform: "uppercase" }}>Complete your profile</h1>
           <p style={{ color: "#a3adb4", margin: "18px 0 0", maxWidth: 520, lineHeight: 1.5 }}>
             We only ask for the minimum needed to compare your metrics with similar users. No full name. No exact birth date.
           </p>

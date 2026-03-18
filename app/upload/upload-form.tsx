@@ -171,11 +171,11 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
         <section style={{ border: "1px solid rgba(32, 217, 133, 0.16)", background: "rgba(23, 29, 34, 0.86)", borderRadius: 22, padding: 18 }}>
           <h3 style={{ marginTop: 0, color: "#f5f5f5", textTransform: "uppercase", letterSpacing: "-0.03em" }}>Consent required</h3>
           <p style={{ marginTop: 0, color: "#a3adb4" }}>
-            Before you upload your WHOOP data, please review the terms below and confirm that you understand this service is for informational use only.
+            Before you upload your WHOOP data, please review the terms below and confirm that you understand this service is for informational use only
           </p>
 
           <h4 style={{ margin: "12px 0 6px", color: "#f5f5f5" }}>Before you continue</h4>
-          <p style={{ marginTop: 0, color: "#a3adb4" }}>Please accept both statements to continue.</p>
+          <p style={{ marginTop: 0, color: "#a3adb4" }}>Please accept both statements to continue</p>
 
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
             <input type="checkbox" checked={whoopProcessingConsent} onChange={(event) => setWhoopProcessingConsent(event.target.checked)} />
@@ -188,7 +188,7 @@ export function UploadForm({ initialConsentSatisfied }: UploadFormProps) {
           </label>
 
           <p style={{ margin: "8px 0", color: "#a3adb4" }}>
-            By continuing, you agree to the <a href="/privacy">Privacy Notice</a> and <a href="/terms">Terms of Use</a>.
+            By continuing, you agree to the <a href="/privacy">Privacy Notice</a> and <a href="/terms">Terms of Use</a>
           </p>
 
           <button type="button" onClick={onSubmitConsent} disabled={consentLoading || !whoopProcessingConsent || !informationalOnlyConsent} style={{ padding: "12px 16px", borderRadius: 999, border: "none", background: "#f5f5f5", color: "#080808", fontWeight: 700 }}>

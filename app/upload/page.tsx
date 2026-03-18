@@ -36,12 +36,12 @@ export default async function UploadPage() {
           boxShadow: "0 28px 90px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255,255,255,0.03)",
         }}
       >
-        <BrandWordmark subtitle="Upload your WHOOP export to unlock your first results." />
+        <BrandWordmark subtitle="Upload your WHOOP export to unlock your first results" />
         <p style={{ margin: "22px 0 8px", color: "#aeb5bb", fontSize: 12, letterSpacing: "0.22em", textTransform: "uppercase", fontWeight: 700 }}>Data intake</p>
         <h1 style={{ margin: "0 0 8px", fontSize: 58, lineHeight: 0.94, letterSpacing: "-0.06em", textTransform: "uppercase" }}>Upload WHOOP files</h1>
-        <p style={{ margin: 0, color: "#20d985" }}>Bring in your exports to unlock the first full dashboard pass.</p>
+        <p style={{ margin: 0, color: "#20d985" }}>Bring in your exports to unlock the first full dashboard pass</p>
         <p style={{ margin: "10px 0 0", color: "#a3adb4" }}>
-          By continuing, you agree to the <Link href="/privacy">Privacy Notice</Link> and <Link href="/terms">Terms of Use</Link>.
+          By continuing, you agree to the <Link href="/privacy">Privacy Notice</Link> and <Link href="/terms">Terms of Use</Link>
         </p>
       </header>
 

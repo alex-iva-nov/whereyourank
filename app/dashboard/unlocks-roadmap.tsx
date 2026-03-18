@@ -146,7 +146,7 @@ const getDeltaTone = (delta: number | null): ComparisonTone => {
 
 const formatRecoveryAccent = (percentile: number | null): string => {
   if (percentile == null) return "SOON";
-  return `${percentile}%`;
+  return `${Math.round(percentile)}%`;
 };
 
 const formatRecoveryBody = (percentile: number | null): string => {
@@ -154,7 +154,7 @@ const formatRecoveryBody = (percentile: number | null): string => {
     return "Your average recovery score will appear here after we have enough of your data.";
   }
 
-  return `Your average recovery score is higher than ${percentile}% of users in the current dataset`;
+  return `Your average recovery score is higher than ${Math.round(percentile)}% of users in the current dataset`;
 };
 
 const formatSleepAccent = (delta: number | null): string => {
