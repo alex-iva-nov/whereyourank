@@ -1,8 +1,13 @@
 import { getCurrentProfile } from "@/lib/auth/server";
 import { getCohortFallbackOrder, type CohortMetricKey, type CohortStrategy } from "@/lib/analytics/cohorts";
+import {
+  buildPercentileAnchors,
+  getLatestAggregateProfiles,
+  getLatestAggregateRowsForMetrics,
+  getLatestAggregateRowsForUser,
+} from "@/lib/analytics/latest-aggregates";
 import { estimatePercentileFromAnchors, percentileToRankLabel } from "@/lib/analytics/percentile";
 import { isAggregateCohortEligible } from "@/lib/privacy/aggregate-guards";
-import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 
 const DEFAULT_METRICS: CohortMetricKey[] = ["hrv_ms", "sleep_performance_pct", "recovery_score_pct"];
 
@@ -72,40 +77,60 @@ export const getUserCohortComparisons = async (
     }));
   }
 
-  const supabase = await createSupabaseServerClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const [userMetricRows, latestRows] = await Promise.all([
+    getLatestAggregateRowsForUser(userId, metrics),
+    getLatestAggregateRowsForMetrics(metrics),
+  ]);
 
-  const { data: userMetricRowsRaw, error: userMetricError } = await supabase
-    .from("user_metric_30d_aggregates")
-    .select("metric_key, metric_value, window_end_date")
-    .eq("user_id", userId)
-    .eq("window_end_date", today)
-    .in("metric_key", metrics);
-
-  if (userMetricError) {
-    throw new Error(`Failed to load user metric aggregates: ${userMetricError.message}`);
-  }
-
-  const userMetricRows = (userMetricRowsRaw ?? []) as UserAggregateRow[];
   const userMetricByKey = new Map<CohortMetricKey, UserAggregateRow>();
-  for (const row of userMetricRows) {
-    userMetricByKey.set(row.metric_key, row);
+  for (const row of userMetricRows as UserAggregateRow[]) {
+    userMetricByKey.set(row.metric_key as CohortMetricKey, row);
   }
 
   const cohortKeys = getCohortFallbackOrder(profile.age_bucket, profile.sex);
+  const latestProfiles = await getLatestAggregateProfiles(latestRows.map((row) => row.user_id));
+  const cohortRows: CohortPercentileRow[] = [];
 
-  const { data: cohortRowsRaw, error: cohortRowsError } = await supabase
-    .from("cohort_metric_percentiles")
-    .select("cohort_key, metric_key, sample_size, p10, p25, p50, p75, p90")
-    .eq("window_end_date", today)
-    .in("metric_key", metrics)
-    .in("cohort_key", cohortKeys);
+  for (const metricKey of metrics) {
+    const metricRows = latestRows.filter((row) => row.metric_key === metricKey);
 
-  if (cohortRowsError) {
-    throw new Error(`Failed to load cohort percentiles: ${cohortRowsError.message}`);
+    for (const cohortKey of cohortKeys) {
+      const values = metricRows
+        .filter((row) => {
+          const rowProfile = latestProfiles.get(row.user_id);
+          if (!rowProfile) return false;
+
+          if (cohortKey === "all") return true;
+          if (cohortKey === `age:${profile.age_bucket}`) {
+            return rowProfile.age_bucket === profile.age_bucket;
+          }
+
+          return (
+            cohortKey === `age_sex:${profile.age_bucket}:${profile.sex}` &&
+            rowProfile.age_bucket === profile.age_bucket &&
+            rowProfile.sex === profile.sex
+          );
+        })
+        .map((row) => Number(row.metric_value))
+        .filter((value) => Number.isFinite(value));
+
+      const anchors = buildPercentileAnchors(values);
+      if (!anchors) {
+        continue;
+      }
+
+      cohortRows.push({
+        cohort_key: cohortKey,
+        metric_key: metricKey,
+        sample_size: anchors.sampleSize,
+        p10: anchors.p10,
+        p25: anchors.p25,
+        p50: anchors.p50,
+        p75: anchors.p75,
+        p90: anchors.p90,
+      });
+    }
   }
-
-  const cohortRows = (cohortRowsRaw ?? []) as CohortPercentileRow[];
 
   const results: UserCohortComparisonItem[] = [];
 

@@ -1,17 +1,15 @@
 import "server-only";
 
-import { supabaseAdmin } from "@/lib/supabase/admin-client";
 import { publicEnv } from "@/lib/env";
 import { estimatePercentileFromAnchors } from "@/lib/analytics/percentile";
+import {
+  buildPercentileAnchors,
+  getLatestAggregateRowsForMetrics,
+  getLatestAggregateRowsForUser,
+} from "@/lib/analytics/latest-aggregates";
 
 type MetricKey = "recovery_score_pct" | "asleep_duration_min" | "hrv_ms";
 type ComparisonState = "ok" | "no_user_value" | "no_dataset";
-
-type AggregateRow = {
-  metric_key: MetricKey;
-  metric_value: number;
-  window_end_date: string;
-};
 
 type CohortPercentileRow = {
   metric_key: MetricKey;
@@ -86,44 +84,10 @@ const buildRecoveryComparison = (
 
 export const getEarlyComparisonSectionData = async (userId: string): Promise<EarlyComparisonSectionData> => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
-
-    const [{ data: userData, error: userError }, { data: cohortData, error: cohortError }] = await Promise.all([
-      supabaseAdmin
-        .from("user_metric_30d_aggregates")
-        .select("metric_key, metric_value, window_end_date")
-        .eq("user_id", userId)
-        .eq("window_end_date", today)
-        .in("metric_key", METRICS),
-      supabaseAdmin
-        .from("cohort_metric_percentiles")
-        .select("metric_key, sample_size, p10, p25, p50, p75, p90")
-        .eq("window_end_date", today)
-        .eq("cohort_key", "all")
-        .in("metric_key", METRICS),
+    const [userRows, latestRows] = await Promise.all([
+      getLatestAggregateRowsForUser(userId, METRICS),
+      getLatestAggregateRowsForMetrics(METRICS),
     ]);
-
-    if (userError) {
-      throw new Error(`Failed to load early comparison aggregates: ${userError.message}`);
-    }
-
-    if (cohortError) {
-      throw new Error(`Failed to load early comparison cohort aggregates: ${cohortError.message}`);
-    }
-
-    const userRows = ((userData ?? []) as AggregateRow[]).map((row) => ({
-      ...row,
-      metric_value: Number(row.metric_value),
-    }));
-    const cohortRows = ((cohortData ?? []) as CohortPercentileRow[]).map((row) => ({
-      ...row,
-      sample_size: Number(row.sample_size),
-      p10: Number(row.p10),
-      p25: Number(row.p25),
-      p50: Number(row.p50),
-      p75: Number(row.p75),
-      p90: Number(row.p90),
-    }));
 
     const cohortMinSampleSize = publicEnv.cohortMinSampleSize;
     const userValueByMetric = new Map<MetricKey, number>();
@@ -131,13 +95,27 @@ export const getEarlyComparisonSectionData = async (userId: string): Promise<Ear
 
     for (const row of userRows) {
       if (Number.isFinite(row.metric_value)) {
-        userValueByMetric.set(row.metric_key, row.metric_value);
+        userValueByMetric.set(row.metric_key as MetricKey, row.metric_value);
       }
     }
 
-    for (const row of cohortRows) {
-      if (row.sample_size >= cohortMinSampleSize && Number.isFinite(row.p50)) {
-        cohortByMetric.set(row.metric_key, row);
+    for (const metricKey of METRICS) {
+      const metricValues = latestRows
+        .filter((row) => row.metric_key === metricKey)
+        .map((row) => Number(row.metric_value))
+        .filter((value) => Number.isFinite(value));
+
+      const anchors = buildPercentileAnchors(metricValues);
+      if (anchors && anchors.sampleSize >= cohortMinSampleSize && Number.isFinite(anchors.p50)) {
+        cohortByMetric.set(metricKey, {
+          metric_key: metricKey,
+          sample_size: anchors.sampleSize,
+          p10: anchors.p10,
+          p25: anchors.p25,
+          p50: anchors.p50,
+          p75: anchors.p75,
+          p90: anchors.p90,
+        });
       }
     }
 

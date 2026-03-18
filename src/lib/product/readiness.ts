@@ -1,3 +1,5 @@
+import { getLatestAnalyticsWindowDateForUser } from "@/lib/analytics/latest-aggregates";
+
 export const REQUIRED_WHOOP_FILE_KINDS = [
   "physiological_cycles",
   "sleeps",
@@ -45,13 +47,16 @@ export const getUploadReadinessForUser = async (supabase: any, userId: string): 
 };
 
 export const getAvailableMetricKeysForUser = async (supabase: any, userId: string): Promise<string[]> => {
-  const today = new Date().toISOString().slice(0, 10);
+  const latestWindowEndDate = await getLatestAnalyticsWindowDateForUser(userId);
+  if (!latestWindowEndDate) {
+    return [];
+  }
 
   const { data, error } = await supabase
     .from("user_metric_30d_aggregates")
     .select("metric_key")
     .eq("user_id", userId)
-    .eq("window_end_date", today);
+    .eq("window_end_date", latestWindowEndDate);
 
   if (error) {
     throw new Error(`Failed to load user metrics availability: ${error.message}`);
