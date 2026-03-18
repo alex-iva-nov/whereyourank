@@ -13,6 +13,16 @@ type UnlocksRoadmapProps = {
   earlyComparison: EarlyComparisonSectionData;
 };
 
+type ComparisonTone = "green" | "red" | "neutral";
+
+type ComparisonCardProps = {
+  title: string;
+  accent: string;
+  body: string;
+  tone: ComparisonTone;
+  icon: React.ReactNode;
+};
+
 type MilestoneCardProps = {
   title: string;
   description: string;
@@ -21,62 +31,105 @@ type MilestoneCardProps = {
   unlocked: boolean;
 };
 
-type ComparisonTone = "green" | "red" | "neutral";
-
-type ComparisonCardProps = {
-  title: string;
-  body: string;
-  tone: ComparisonTone;
+const sectionStyle: React.CSSProperties = {
+  background: "linear-gradient(180deg, #20262c 0%, #11151a 100%)",
+  borderRadius: 30,
+  padding: 24,
+  marginTop: 16,
+  border: "1px solid rgba(255, 255, 255, 0.05)",
+  boxShadow: "0 28px 90px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255,255,255,0.03)",
 };
 
-const checkIcon = (
-  <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: 999, background: "#daf2df", color: "#1b5e20", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M2 5.2L4.1 7.3L8 3.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  </span>
-);
+const toneStyles = {
+  green: {
+    dot: "#20d985",
+    border: "rgba(32, 217, 133, 0.12)",
+    glow: "rgba(32, 217, 133, 0.15)",
+    text: "#20d985",
+  },
+  red: {
+    dot: "#20d985",
+    border: "rgba(32, 217, 133, 0.12)",
+    glow: "rgba(32, 217, 133, 0.15)",
+    text: "#20d985",
+  },
+  neutral: {
+    dot: "#20d985",
+    border: "rgba(32, 217, 133, 0.12)",
+    glow: "rgba(32, 217, 133, 0.15)",
+    text: "#20d985",
+  },
+} as const;
 
-const toneColors: Record<ComparisonTone, { dot: string; ring: string }> = {
-  green: { dot: "#2e7d32", ring: "#d8ecd9" },
-  red: { dot: "#c0392b", ring: "#f4d2cc" },
-  neutral: { dot: "#8a8a8a", ring: "#e6e6e6" },
-};
+function ComparisonCard({ title, accent, body, tone, icon }: ComparisonCardProps) {
+  const colors = toneStyles[tone];
 
-function MilestoneCard({ title, description, items, example, unlocked }: MilestoneCardProps) {
   return (
-    <article style={{ background: "#fff", borderRadius: 8, border: `1px solid ${unlocked ? "#bfe3c6" : "#d7eadb"}`, boxShadow: unlocked ? "none" : "inset 4px 0 0 #7bc48a", padding: 14 }}>
-      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8, padding: "4px 8px", borderRadius: 999, background: unlocked ? "#e6f4ea" : "#eff8f1", color: unlocked ? "#1b5e20" : "#2d6a4f", fontSize: 12, fontWeight: 700 }}>
-        {unlocked ? "Unlocked" : "Upcoming"}
+    <article
+      style={{
+        minHeight: 220,
+        borderRadius: 22,
+        padding: 22,
+        background: "linear-gradient(180deg, rgba(41, 47, 53, 0.98) 0%, rgba(33, 38, 44, 0.98) 100%)",
+        border: `1px solid ${colors.border}`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04), 0 14px 28px ${colors.glow}`,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        gap: 18,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span aria-hidden="true" style={{ display: "inline-flex", color: "#97a3ab" }}>
+            {icon}
+          </span>
+          <h3 style={{ margin: 0, color: "#c7ced4", fontSize: 12, letterSpacing: "0.16em", textTransform: "uppercase", fontWeight: 700 }}>{title}</h3>
+        </div>
+        <span
+          aria-hidden="true"
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 999,
+            background: colors.dot,
+            boxShadow: "0 0 12px rgba(32, 217, 133, 0.45)",
+            flexShrink: 0,
+          }}
+        />
       </div>
-      <h3 style={{ margin: "0 0 8px", fontSize: 20, color: "#183a1f" }}>{title}</h3>
-      <p style={{ margin: "0 0 10px", color: "#444" }}>{description}</p>
-      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8 }}>
-        {items.map((item) => (
-          <li key={item} style={{ display: "flex", alignItems: "flex-start", gap: 8, color: "#333" }}>
-            {checkIcon}
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-      <p style={{ margin: "10px 0 0", color: "#666", fontSize: 13 }}>{example}</p>
+
+      <div style={{ color: colors.text, fontSize: accent.length > 12 ? 28 : 42, lineHeight: 0.95, letterSpacing: "-0.045em", fontWeight: 600, textTransform: "uppercase" }}>
+        {accent}
+      </div>
+
+      <p style={{ margin: 0, color: "#a3adb4", fontSize: 14, lineHeight: 1.45 }}>{body}</p>
     </article>
   );
 }
 
-function ComparisonCard({ title, body, tone }: ComparisonCardProps) {
-  const colors = toneColors[tone];
-
+function MilestoneCard({ title, description, items, example, unlocked }: MilestoneCardProps) {
   return (
-    <article style={{ background: "#fff", borderRadius: 8, border: "1px solid #ddd", padding: 16, minHeight: 140 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <h3 style={{ margin: 0, fontSize: 18 }}>{title}</h3>
-        <span
-          aria-hidden="true"
-          style={{ width: 14, height: 14, borderRadius: 999, background: colors.dot, boxShadow: `0 0 0 4px ${colors.ring}`, flexShrink: 0 }}
-        />
+    <article
+      style={{
+        borderRadius: 22,
+        padding: 22,
+        background: "linear-gradient(180deg, rgba(41, 47, 53, 0.98) 0%, rgba(33, 38, 44, 0.98) 100%)",
+        border: `1px solid ${unlocked ? "rgba(32, 217, 133, 0.18)" : "rgba(255,255,255,0.06)"}`,
+        boxShadow: unlocked ? "0 14px 28px rgba(32, 217, 133, 0.14)" : "inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}
+    >
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 999, background: unlocked ? "rgba(32, 217, 133, 0.12)" : "rgba(255,255,255,0.05)", color: unlocked ? "#20d985" : "#c7ced4", fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700 }}>
+        {unlocked ? "Unlocked" : "Upcoming"}
       </div>
-      <p style={{ margin: "12px 0 0", color: "#333" }}>{body}</p>
+      <h3 style={{ margin: "14px 0 8px", color: "#f5f5f5", fontSize: 28, lineHeight: 0.98, letterSpacing: "-0.04em", textTransform: "uppercase" }}>{title}</h3>
+      <p style={{ margin: 0, color: "#a3adb4", lineHeight: 1.5 }}>{description}</p>
+      <ul style={{ margin: "14px 0 0", paddingLeft: 18, color: "#d0d7dc", lineHeight: 1.6 }}>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+      <p style={{ margin: "14px 0 0", color: "#20d985", fontSize: 13 }}>{example}</p>
     </article>
   );
 }
@@ -86,75 +139,59 @@ const getRecoveryTone = (percentile: number | null): ComparisonTone => {
   return percentile >= 50 ? "green" : "red";
 };
 
-const getSleepTone = (delta: number | null): ComparisonTone => {
+const getDeltaTone = (delta: number | null): ComparisonTone => {
   if (delta == null) return "neutral";
   return delta >= 0 ? "green" : "red";
 };
 
-const getHrvTone = (delta: number | null): ComparisonTone => {
-  if (delta == null) return "neutral";
-  return delta >= 0 ? "green" : "red";
+const formatRecoveryAccent = (percentile: number | null): string => {
+  if (percentile == null) return "SOON";
+  return `${percentile}%`;
 };
 
-const formatSleepDelta = (delta: number | null): string => {
+const formatRecoveryBody = (percentile: number | null): string => {
+  if (percentile == null) {
+    return "Your average recovery score will appear here after we have enough of your data.";
+  }
+
+  return `Your average recovery score is higher than ${percentile}% of users in the current dataset`;
+};
+
+const formatSleepAccent = (delta: number | null): string => {
+  if (delta == null) return "SOON";
+  if (delta === 0) return "SAME SLEEP";
+  return `${delta > 0 ? "+" : "-"}${Math.abs(delta)} min`;
+};
+
+const formatSleepBody = (delta: number | null): string => {
   if (delta == null) {
     return "Your sleep comparison will appear here after we have enough of your data.";
   }
 
   if (delta === 0) {
-    return "You sleep about the same amount as the current dataset average.";
+    return "You sleep about the same amount as the current benchmark baseline";
   }
 
-  const direction = delta > 0 ? "longer" : "less";
-  return `You sleep ${Math.abs(delta)} minutes ${direction} than the current dataset average.`;
+  return `You sleep ${Math.abs(delta)} minutes ${delta > 0 ? "longer" : "less"} than the current benchmark baseline`;
 };
 
-const formatHrvDelta = (delta: number | null): string => {
+const formatHrvAccent = (delta: number | null): string => {
+  if (delta == null) return "SOON";
+  if (delta === 0) return "SAME HRV";
+  return `${delta > 0 ? "+" : "-"}${Math.abs(delta)} ms`;
+};
+
+const formatHrvBody = (delta: number | null): string => {
   if (delta == null) {
     return "Your HRV comparison will appear here after we have enough of your data.";
   }
 
   if (delta === 0) {
-    return "Your HRV baseline is about the same as the dataset average.";
+    return "Your HRV baseline is about the same as the current benchmark baseline";
   }
 
-  const direction = delta > 0 ? "above" : "below";
-  return `Your HRV baseline is ${Math.abs(delta)} ms ${direction} the dataset average.`;
+  return `Your HRV baseline is ${Math.abs(delta)} ms ${delta > 0 ? "above" : "below"} the current benchmark baseline`;
 };
-
-const formatRecoveryComparison = (percentile: number | null): string => {
-  if (percentile == null) {
-    return "Your average recovery score will appear here after we have enough of your data.";
-  }
-
-  return `Your average recovery score is higher than ${percentile}% of users in the current dataset.`;
-};
-
-function EarlyComparisonSection({ earlyComparison }: { earlyComparison: EarlyComparisonSectionData }) {
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <h3 style={{ margin: "0 0 6px", fontSize: 22, color: "#183a1f" }}>How you compare so far</h3>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-        <ComparisonCard
-          title="Recovery rank"
-          body={formatRecoveryComparison(earlyComparison.recovery.percentile)}
-          tone={getRecoveryTone(earlyComparison.recovery.percentile)}
-        />
-        <ComparisonCard
-          title="Sleep comparison"
-          body={formatSleepDelta(earlyComparison.sleep.delta)}
-          tone={getSleepTone(earlyComparison.sleep.delta)}
-        />
-        <ComparisonCard
-          title="HRV comparison"
-          body={formatHrvDelta(earlyComparison.hrv.delta)}
-          tone={getHrvTone(earlyComparison.hrv.delta)}
-        />
-      </div>
-    </div>
-  );
-}
 
 export function UnlocksRoadmap({ totalUsers, earlyComparison }: UnlocksRoadmapProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -167,15 +204,14 @@ export function UnlocksRoadmap({ totalUsers, earlyComparison }: UnlocksRoadmapPr
 
   const onShare = async () => {
     const url = window.location.origin;
-    const sharePayload = {
-      title: "WhereYouRank",
-      text: "Compare your WHOOP data and unlock better insights as the dataset grows.",
-      url,
-    };
 
     try {
       if (navigator.share) {
-        await navigator.share(sharePayload);
+        await navigator.share({
+          title: "WhereYouRank",
+          text: "Compare your WHOOP data and unlock better insights as the dataset grows.",
+          url,
+        });
         setFeedback("Shared");
         return;
       }
@@ -195,54 +231,113 @@ export function UnlocksRoadmap({ totalUsers, earlyComparison }: UnlocksRoadmapPr
   };
 
   return (
-    <section style={{ background: "#fafafa", borderRadius: 8, border: "1px solid #e8e8e8", padding: 16, marginTop: 12 }}>
-      <h2 style={{ marginTop: 0 }}>What unlocks as more users join</h2>
-      <p style={{ margin: "0 0 14px", color: "#555" }}>
-        The more people who join WhereYouRank, the more powerful the comparisons become.
+    <section style={sectionStyle}>
+      <style>{`
+        .roadmap-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 14px;
+          margin-top: 22px;
+        }
+
+        .roadmap-footer {
+          margin-top: 18px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+      `}</style>
+      <h2 style={{ margin: "0 0 8px", color: "#f5f5f5", fontSize: 34, lineHeight: 1, letterSpacing: "0.03em", textTransform: "uppercase", fontWeight: 700 }}>What unlocks as more users join</h2>
+      <p style={{ margin: 0, color: "#a3adb4", fontSize: 14, maxWidth: 760 }}>
+        The more people who join WhereYouRank, the more powerful the comparisons become
       </p>
 
-      <div style={{ marginBottom: 16 }}>
-        <p style={{ margin: "0 0 8px", color: "#444", fontWeight: 600 }}>{progressLabel}</p>
-        <div style={{ width: "100%", height: 10, background: "#e9e9e9", borderRadius: 999, overflow: "hidden" }}>
-          <div style={{ width: `${progressPercent}%`, height: "100%", background: totalUsers >= 1000 ? "#1b5e20" : "#2d6a4f", borderRadius: 999 }} />
+      <div style={{ marginTop: 18 }}>
+        <p style={{ margin: "0 0 8px", color: "#f5f5f5", fontWeight: 600 }}>{progressLabel}</p>
+        <div style={{ width: "100%", height: 12, background: "rgba(255,255,255,0.08)", borderRadius: 999, overflow: "hidden" }}>
+          <div style={{ width: `${progressPercent}%`, height: "100%", background: "linear-gradient(90deg, #20d985 0%, #74f6b6 100%)", borderRadius: 999 }} />
         </div>
       </div>
 
-      {totalUsers < 100 ? <EarlyComparisonSection earlyComparison={earlyComparison} /> : null}
+      {totalUsers < 100 ? (
+        <div style={{ marginTop: 18 }}>
+          <h3 style={{ margin: "0 0 6px", fontSize: 22, color: "#f5f5f5", textTransform: "uppercase", letterSpacing: "-0.03em" }}>How you compare so far</h3>
+          <div className="roadmap-grid" style={{ marginTop: 14 }}>
+            <ComparisonCard
+              title="Recovery rank"
+              accent={formatRecoveryAccent(earlyComparison.recovery.percentile)}
+              body={formatRecoveryBody(earlyComparison.recovery.percentile)}
+              tone={getRecoveryTone(earlyComparison.recovery.percentile)}
+              icon={
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 4 14.5 9l5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.5-.8L12 4Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                </svg>
+              }
+            />
+            <ComparisonCard
+              title="Sleep comparison"
+              accent={formatSleepAccent(earlyComparison.sleep.delta)}
+              body={formatSleepBody(earlyComparison.sleep.delta)}
+              tone={getDeltaTone(earlyComparison.sleep.delta)}
+              icon={
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M7 5.5h10a2 2 0 0 1 2 2v5.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.7" />
+                  <path d="M7 17v2M17 17v2M5 10h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              }
+            />
+            <ComparisonCard
+              title="HRV comparison"
+              accent={formatHrvAccent(earlyComparison.hrv.delta)}
+              body={formatHrvBody(earlyComparison.hrv.delta)}
+              tone={getDeltaTone(earlyComparison.hrv.delta)}
+              icon={
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 12h4l2-4 4 8 2-4h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              }
+            />
+          </div>
+        </div>
+      ) : null}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+      <div className="roadmap-grid">
         <MilestoneCard
           title="At 100 users"
-          description="You'll unlock real comparisons with people like you."
-          items={[
-            "HRV percentile by age",
-            "Sleep vs people like you",
-            "Strain vs similar users",
-            "Are you overtraining compared to others?",
-          ]}
-          example='Example: "Your HRV is higher than 72% of users aged 35-44."'
+          description="You'll unlock real comparisons with people like you"
+          items={["HRV percentile by age", "Sleep vs people like you", "Strain vs similar users", "Are you overtraining compared to others?"]}
+          example={'Example: "Your HRV is higher than 72% of users aged 35-44"'}
           unlocked={hundredUnlocked}
         />
         <MilestoneCard
           title="At 1000 users"
-          description="You'll unlock deeper insights powered by the full dataset."
-          items={[
-            "Habits that improve recovery",
-            "Sleep patterns of high-HRV users",
-            "Training patterns of top performers",
-            "AI insights based on similar users",
-          ]}
-          example='Example: "People like you recover faster when strain stays below 15."'
+          description="You'll unlock deeper insights powered by the full dataset"
+          items={["Habits that improve recovery", "Sleep patterns of high-HRV users", "Training patterns of top performers", "AI insights based on similar users"]}
+          example={'Example: "People like you recover faster when strain stays below 15"'}
           unlocked={thousandUnlocked}
         />
       </div>
 
-      <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div className="roadmap-footer">
         <div>
-          <p style={{ margin: 0, color: "#555" }}>Share this project to unlock comparisons sooner.</p>
-          {feedback ? <p style={{ margin: "6px 0 0", color: "#2d6a4f", fontSize: 13 }}>{feedback}</p> : null}
+          <p style={{ margin: 0, color: "#a3adb4", fontSize: 13 }}>Share this project to unlock comparisons sooner</p>
+          {feedback ? <p style={{ margin: "6px 0 0", color: "#20d985", fontSize: 13 }}>{feedback}</p> : null}
         </div>
-        <button type="button" onClick={onShare} style={{ padding: "8px 14px", borderRadius: 999, border: "1px solid #b8dcbc", background: "#edf8ef", color: "#1b5e20", fontWeight: 700, cursor: "pointer" }}>
+        <button
+          type="button"
+          onClick={onShare}
+          style={{
+            padding: "10px 16px",
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.1)",
+            background: "#171717",
+            color: "#f5f5f5",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
           Share
         </button>
       </div>
