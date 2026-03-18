@@ -1,6 +1,6 @@
 import { revalidateTag, unstable_cache } from "next/cache";
 
-import { createSupabaseServerClient } from "../supabase/server-client";
+import { supabaseAdmin } from "../supabase/admin-client";
 
 export type EarlyInsightStatus = "ok" | "insufficient_data" | "error";
 export type EarlyInsightTone = "green" | "red" | "neutral";
@@ -299,24 +299,23 @@ const getFallbackInsightCards = (nowIso: string): EarlyInsightCard[] => [
 export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsightCard[]> => {
   const loadUserEarlyInsights = async (): Promise<EarlyInsightCard[]> => {
     try {
-      const supabase = await createSupabaseServerClient();
       const nowIso = new Date().toISOString();
       const lookbackStart = addDaysToDateString(nowIso.slice(0, 10), -(EARLY_INSIGHTS_LOOKBACK_DAYS - 1));
 
       const [dailyRes, sleepsRes, journalRes] = await Promise.all([
-        supabase
+        supabaseAdmin
           .from("user_daily_metrics")
           .select("metric_date, recovery_score_pct, hrv_ms, day_strain, workouts_count")
           .eq("user_id", userId)
           .gte("metric_date", lookbackStart)
           .order("metric_date", { ascending: true }),
-        supabase
+        supabaseAdmin
           .from("whoop_sleep_facts")
           .select("sleep_onset_at, wake_onset_at, asleep_duration_min, sleep_consistency_percent, nap")
           .eq("user_id", userId)
           .gte("wake_onset_at", `${lookbackStart}T00:00:00.000Z`)
           .order("wake_onset_at", { ascending: true }),
-        supabase
+        supabaseAdmin
           .from("whoop_journal_facts")
           .select("cycle_start_at, question_text, answered_yes")
           .eq("user_id", userId)
