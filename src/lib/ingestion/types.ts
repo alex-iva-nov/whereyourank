@@ -32,7 +32,8 @@ export type IngestionErrorCode =
   | "missing_required_field"
   | "duplicate_in_batch"
   | "db_upsert_failed"
-  | "invalid_row_shape";
+  | "invalid_row_shape"
+  | "unsafe_csv_content";
 
 export type IngestionErrorItem = {
   code: IngestionErrorCode;

@@ -101,9 +101,7 @@ for select using (auth.uid() = user_id);
 create policy "user_metric_percentiles_select_own" on public.user_metric_percentiles
 for select using (auth.uid() = user_id);
 
--- cohort metrics are non-identifying aggregate snapshots
-create policy "cohort_metric_distributions_select_authenticated" on public.cohort_metric_distributions
-for select using (auth.role() = 'authenticated');
+-- cohort metrics are restricted to server-side access only
 
 -- deletion requests
 create policy "deletion_requests_select_own" on public.deletion_requests

@@ -10,4 +10,5 @@ export const ERROR_CATALOG: Record<IngestionErrorCode, { retryable: boolean }> =
   duplicate_in_batch: { retryable: false },
   db_upsert_failed: { retryable: true },
   invalid_row_shape: { retryable: false },
+  unsafe_csv_content: { retryable: false },
 };

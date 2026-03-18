@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { recomputeAnalyticsForUser } from "@/lib/analytics/recompute";
+import { recomputeUserDerivedAnalytics } from "@/lib/analytics/recompute";
 import { revalidateUserEarlyInsights } from "@/lib/analytics/early-insights";
 import { publicEnv } from "@/lib/env";
 import { readCsv } from "@/lib/ingestion/csv/readCsv";
@@ -22,6 +22,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 const MIN_UPLOAD_ROWS = 10;
 const MAX_UPLOAD_FILES = 8;
 const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_CSV_MIME_TYPES = new Set([
+  "text/csv",
+  "application/csv",
+  "application/vnd.ms-excel",
+  "",
+]);
 
 const cleanupRawUploads = async (storagePaths: string[], userId: string) => {
   if (storagePaths.length === 0) {
@@ -96,6 +102,23 @@ export async function POST(request: Request) {
 
   for (const file of files) {
     try {
+      const lowercaseName = file.name.toLowerCase();
+      if (!lowercaseName.endsWith(".csv")) {
+        batchErrors.push({
+          filename: file.name,
+          message: "Only CSV files exported from WHOOP are supported.",
+        });
+        continue;
+      }
+
+      if (!ALLOWED_CSV_MIME_TYPES.has(file.type)) {
+        batchErrors.push({
+          filename: file.name,
+          message: "This upload did not look like a CSV file.",
+        });
+        continue;
+      }
+
       if (file.size > MAX_UPLOAD_FILE_BYTES) {
         batchErrors.push({
           filename: file.name,
@@ -163,12 +186,12 @@ export async function POST(request: Request) {
 
     if (ingestionResult.uploadedFiles > 0) {
       try {
-        const details = await recomputeAnalyticsForUser(user.id);
+        const details = await recomputeUserDerivedAnalytics(user.id);
         analyticsRecompute = { ok: true, details };
       } catch (error) {
         analyticsRecompute = {
           ok: false,
-          error: error instanceof Error ? error.message : "Analytics recompute failed",
+          error: error instanceof Error ? error.message : "Derived analytics recompute failed",
         };
       }
     }

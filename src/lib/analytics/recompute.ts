@@ -2,7 +2,17 @@ import { supabaseAdmin } from "@/lib/supabase/admin-client";
 import { getLatestAnalyticsWindowDateForUser } from "@/lib/analytics/latest-aggregates";
 import { MIN_AGGREGATE_COHORT_SIZE } from "@/lib/privacy/aggregate-guards";
 
-export const recomputeAnalyticsForUser = async (userId: string, windowEndDate?: string | null) => {
+export type UserAnalyticsRecomputeResult = {
+  user_id: string;
+  window_end_date: string | null;
+  daily_rows: number;
+  aggregate_rows: number;
+};
+
+export const recomputeAnalyticsForUser = async (
+  userId: string,
+  windowEndDate?: string | null,
+): Promise<UserAnalyticsRecomputeResult> => {
   const effectiveWindowEndDate = windowEndDate ?? await getLatestAnalyticsWindowDateForUser(userId);
   if (!effectiveWindowEndDate) {
     return { user_id: userId, window_end_date: null, daily_rows: 0, aggregate_rows: 0 };
@@ -17,7 +27,28 @@ export const recomputeAnalyticsForUser = async (userId: string, windowEndDate?: 
     throw new Error(`Failed to recompute analytics for user ${userId}: ${error.message}`);
   }
 
-  return data as { user_id: string; window_end_date: string; daily_rows: number; aggregate_rows: number };
+  return data as UserAnalyticsRecomputeResult;
+};
+
+export const recomputeUserDerivedAnalytics = async (
+  userId: string,
+  windowEndDate?: string | null,
+): Promise<UserAnalyticsRecomputeResult> => {
+  const effectiveWindowEndDate = windowEndDate ?? await getLatestAnalyticsWindowDateForUser(userId);
+  if (!effectiveWindowEndDate) {
+    return { user_id: userId, window_end_date: null, daily_rows: 0, aggregate_rows: 0 };
+  }
+
+  const { data, error } = await supabaseAdmin.rpc("recompute_user_derived_analytics", {
+    p_user_id: userId,
+    p_window_end_date: effectiveWindowEndDate,
+  });
+
+  if (error) {
+    throw new Error(`Failed to recompute derived analytics for user ${userId}: ${error.message}`);
+  }
+
+  return data as UserAnalyticsRecomputeResult;
 };
 
 export const recomputeAnalyticsForAll = async (windowEndDate?: string) => {

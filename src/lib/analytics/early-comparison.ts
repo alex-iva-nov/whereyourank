@@ -1,6 +1,6 @@
 import "server-only";
 
-import { publicEnv } from "@/lib/env";
+import { getHowYouCompareSoFarMinSampleSize } from "@/lib/analytics/comparison-policy";
 import { estimatePercentileFromAnchors } from "@/lib/analytics/percentile";
 import {
   buildPercentileAnchors,
@@ -46,7 +46,6 @@ const emptyComparison = (): EarlyComparisonSectionData => ({
 });
 
 const METRICS: MetricKey[] = ["recovery_score_pct", "asleep_duration_min", "hrv_ms"];
-const EARLY_COMPARISON_MIN_SAMPLE_SIZE = 3;
 
 const buildRecoveryComparison = (
   userValue: number | null,
@@ -90,7 +89,7 @@ export const getEarlyComparisonSectionData = async (userId: string): Promise<Ear
       getLatestAggregateRowsForMetrics(METRICS),
     ]);
 
-    const cohortMinSampleSize = Math.min(publicEnv.cohortMinSampleSize, EARLY_COMPARISON_MIN_SAMPLE_SIZE);
+    const cohortMinSampleSize = getHowYouCompareSoFarMinSampleSize();
     const userValueByMetric = new Map<MetricKey, number>();
     const cohortByMetric = new Map<MetricKey, CohortPercentileRow>();
 
