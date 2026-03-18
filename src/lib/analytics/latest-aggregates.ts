@@ -31,6 +31,17 @@ const percentile = (values: number[], p: number): number => {
 
 const unique = <T>(values: T[]): T[] => [...new Set(values)];
 
+const laterDate = (current: string | null, candidate: string | null): string | null => {
+  if (!candidate) return current;
+  if (!current) return candidate;
+  return candidate > current ? candidate : current;
+};
+
+const isoDate = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  return value.slice(0, 10);
+};
+
 export const getLatestAnalyticsWindowDateForUser = async (userId: string): Promise<string | null> => {
   const { data: aggregateRow, error: aggregateError } = await supabaseAdmin
     .from("user_metric_30d_aggregates")
@@ -61,7 +72,54 @@ export const getLatestAnalyticsWindowDateForUser = async (userId: string): Promi
     throw new Error(`Failed to load latest metric date: ${metricError.message}`);
   }
 
-  return (metricRow as { metric_date: string } | null)?.metric_date ?? null;
+  const metricDate = (metricRow as { metric_date: string } | null)?.metric_date ?? null;
+  if (metricDate) {
+    return metricDate;
+  }
+
+  const [cycleRow, sleepRow, workoutRow, journalRow] = await Promise.all([
+    supabaseAdmin
+      .from("whoop_cycle_facts")
+      .select("cycle_start_at")
+      .eq("user_id", userId)
+      .order("cycle_start_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("whoop_sleep_facts")
+      .select("wake_onset_at")
+      .eq("user_id", userId)
+      .order("wake_onset_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("whoop_workout_facts")
+      .select("workout_start_at")
+      .eq("user_id", userId)
+      .order("workout_start_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("whoop_journal_facts")
+      .select("cycle_start_at")
+      .eq("user_id", userId)
+      .order("cycle_start_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const rawErrors = [cycleRow.error, sleepRow.error, workoutRow.error, journalRow.error].filter(Boolean);
+  if (rawErrors.length > 0) {
+    throw new Error(`Failed to load latest raw fact dates: ${rawErrors.map((error) => error?.message).join("; ")}`);
+  }
+
+  let latestRawDate: string | null = null;
+  latestRawDate = laterDate(latestRawDate, isoDate((cycleRow.data as { cycle_start_at: string } | null)?.cycle_start_at ?? null));
+  latestRawDate = laterDate(latestRawDate, isoDate((sleepRow.data as { wake_onset_at: string } | null)?.wake_onset_at ?? null));
+  latestRawDate = laterDate(latestRawDate, isoDate((workoutRow.data as { workout_start_at: string } | null)?.workout_start_at ?? null));
+  latestRawDate = laterDate(latestRawDate, isoDate((journalRow.data as { cycle_start_at: string } | null)?.cycle_start_at ?? null));
+
+  return latestRawDate;
 };
 
 export const getLatestAggregateRowsForUser = async (
