@@ -66,6 +66,13 @@ const getCachedUserDataCount = unstable_cache(loadUserDataCount, [USER_DATA_COUN
   tags: [USER_DATA_COUNT_CACHE_TAG],
 });
 
-export const getUserDataCount = async (): Promise<UserDataCountResponse> => getCachedUserDataCount();
+export const getUserDataCount = async (): Promise<UserDataCountResponse> => {
+  try {
+    return await getCachedUserDataCount();
+  } catch (error) {
+    console.error("Failed to load user data count", error);
+    return { totalUsers: 0 };
+  }
+};
 
 export const revalidateUserDataCount = () => revalidateTag(USER_DATA_COUNT_CACHE_TAG);

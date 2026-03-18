@@ -41,6 +41,12 @@ export type EarlyComparisonSectionData = {
   hrv: AverageDeltaComparison;
 };
 
+const emptyComparison = (): EarlyComparisonSectionData => ({
+  recovery: { state: "no_dataset", percentile: null, sampleSize: 0 },
+  sleep: { state: "no_dataset", delta: null, sampleSize: 0 },
+  hrv: { state: "no_dataset", delta: null, sampleSize: 0 },
+});
+
 const METRICS: MetricKey[] = ["recovery_score_pct", "asleep_duration_min", "hrv_ms"];
 
 const buildRecoveryComparison = (
@@ -79,98 +85,103 @@ const buildRecoveryComparison = (
 };
 
 export const getEarlyComparisonSectionData = async (userId: string): Promise<EarlyComparisonSectionData> => {
-  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const today = new Date().toISOString().slice(0, 10);
 
-  const [{ data: userData, error: userError }, { data: cohortData, error: cohortError }] = await Promise.all([
-    supabaseAdmin
-    .from("user_metric_30d_aggregates")
-    .select("metric_key, metric_value, window_end_date")
-    .eq("user_id", userId)
-    .eq("window_end_date", today)
-    .in("metric_key", METRICS),
-    supabaseAdmin
-    .from("cohort_metric_percentiles")
-    .select("metric_key, sample_size, p10, p25, p50, p75, p90")
-    .eq("window_end_date", today)
-    .eq("cohort_key", "all")
-    .in("metric_key", METRICS),
-  ]);
+    const [{ data: userData, error: userError }, { data: cohortData, error: cohortError }] = await Promise.all([
+      supabaseAdmin
+        .from("user_metric_30d_aggregates")
+        .select("metric_key, metric_value, window_end_date")
+        .eq("user_id", userId)
+        .eq("window_end_date", today)
+        .in("metric_key", METRICS),
+      supabaseAdmin
+        .from("cohort_metric_percentiles")
+        .select("metric_key, sample_size, p10, p25, p50, p75, p90")
+        .eq("window_end_date", today)
+        .eq("cohort_key", "all")
+        .in("metric_key", METRICS),
+    ]);
 
-  if (userError) {
-    throw new Error(`Failed to load early comparison aggregates: ${userError.message}`);
-  }
-
-  if (cohortError) {
-    throw new Error(`Failed to load early comparison cohort aggregates: ${cohortError.message}`);
-  }
-
-  const userRows = ((userData ?? []) as AggregateRow[]).map((row) => ({
-    ...row,
-    metric_value: Number(row.metric_value),
-  }));
-  const cohortRows = ((cohortData ?? []) as CohortPercentileRow[]).map((row) => ({
-    ...row,
-    sample_size: Number(row.sample_size),
-    p10: Number(row.p10),
-    p25: Number(row.p25),
-    p50: Number(row.p50),
-    p75: Number(row.p75),
-    p90: Number(row.p90),
-  }));
-
-  const cohortMinSampleSize = publicEnv.cohortMinSampleSize;
-  const userValueByMetric = new Map<MetricKey, number>();
-  const cohortByMetric = new Map<MetricKey, CohortPercentileRow>();
-
-  for (const row of userRows) {
-    if (Number.isFinite(row.metric_value)) {
-      userValueByMetric.set(row.metric_key, row.metric_value);
-    }
-  }
-
-  for (const row of cohortRows) {
-    if (row.sample_size >= cohortMinSampleSize && Number.isFinite(row.p50)) {
-      cohortByMetric.set(row.metric_key, row);
-    }
-  }
-
-  const getDelta = (metricKey: MetricKey): AverageDeltaComparison => {
-    const userValue = userValueByMetric.get(metricKey) ?? null;
-    const cohort = cohortByMetric.get(metricKey);
-
-    if (userValue == null) {
-      return { state: "no_user_value", delta: null, sampleSize: cohort?.sample_size ?? 0 };
+    if (userError) {
+      throw new Error(`Failed to load early comparison aggregates: ${userError.message}`);
     }
 
-    if (!cohort) {
-      return { state: "no_dataset", delta: null, sampleSize: 0 };
+    if (cohortError) {
+      throw new Error(`Failed to load early comparison cohort aggregates: ${cohortError.message}`);
     }
+
+    const userRows = ((userData ?? []) as AggregateRow[]).map((row) => ({
+      ...row,
+      metric_value: Number(row.metric_value),
+    }));
+    const cohortRows = ((cohortData ?? []) as CohortPercentileRow[]).map((row) => ({
+      ...row,
+      sample_size: Number(row.sample_size),
+      p10: Number(row.p10),
+      p25: Number(row.p25),
+      p50: Number(row.p50),
+      p75: Number(row.p75),
+      p90: Number(row.p90),
+    }));
+
+    const cohortMinSampleSize = publicEnv.cohortMinSampleSize;
+    const userValueByMetric = new Map<MetricKey, number>();
+    const cohortByMetric = new Map<MetricKey, CohortPercentileRow>();
+
+    for (const row of userRows) {
+      if (Number.isFinite(row.metric_value)) {
+        userValueByMetric.set(row.metric_key, row.metric_value);
+      }
+    }
+
+    for (const row of cohortRows) {
+      if (row.sample_size >= cohortMinSampleSize && Number.isFinite(row.p50)) {
+        cohortByMetric.set(row.metric_key, row);
+      }
+    }
+
+    const getDelta = (metricKey: MetricKey): AverageDeltaComparison => {
+      const userValue = userValueByMetric.get(metricKey) ?? null;
+      const cohort = cohortByMetric.get(metricKey);
+
+      if (userValue == null) {
+        return { state: "no_user_value", delta: null, sampleSize: cohort?.sample_size ?? 0 };
+      }
+
+      if (!cohort) {
+        return { state: "no_dataset", delta: null, sampleSize: 0 };
+      }
+
+      return {
+        state: "ok",
+        delta: Math.round(userValue - cohort.p50),
+        sampleSize: cohort.sample_size,
+      };
+    };
+
+    const getRecovery = (): RecoveryComparison => {
+      const userValue = userValueByMetric.get("recovery_score_pct") ?? null;
+      const cohort = cohortByMetric.get("recovery_score_pct");
+
+      if (userValue == null) {
+        return { state: "no_user_value", percentile: null, sampleSize: cohort?.sample_size ?? 0 };
+      }
+
+      if (!cohort) {
+        return { state: "no_dataset", percentile: null, sampleSize: 0 };
+      }
+
+      return buildRecoveryComparison(userValue, cohort);
+    };
 
     return {
-      state: "ok",
-      delta: Math.round(userValue - cohort.p50),
-      sampleSize: cohort.sample_size,
+      recovery: getRecovery(),
+      sleep: getDelta("asleep_duration_min"),
+      hrv: getDelta("hrv_ms"),
     };
-  };
-
-  const getRecovery = (): RecoveryComparison => {
-    const userValue = userValueByMetric.get("recovery_score_pct") ?? null;
-    const cohort = cohortByMetric.get("recovery_score_pct");
-
-    if (userValue == null) {
-      return { state: "no_user_value", percentile: null, sampleSize: cohort?.sample_size ?? 0 };
-    }
-
-    if (!cohort) {
-      return { state: "no_dataset", percentile: null, sampleSize: 0 };
-    }
-
-    return buildRecoveryComparison(userValue, cohort);
-  };
-
-  return {
-    recovery: getRecovery(),
-    sleep: getDelta("asleep_duration_min"),
-    hrv: getDelta("hrv_ms"),
-  };
+  } catch (error) {
+    console.error("Failed to load early comparison section data", error);
+    return emptyComparison();
+  }
 };

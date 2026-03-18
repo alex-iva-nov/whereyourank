@@ -200,71 +200,165 @@ const buildInsightCard = (nowIso: string, builder: InsightBuilder): EarlyInsight
   }
 };
 
+const getFallbackInsightCards = (nowIso: string): EarlyInsightCard[] => [
+  {
+    key: "sober_streak_effect",
+    title: "Sober streak effect",
+    accent: "SOON",
+    detail: "We need a bit more clean data before this insight can show up",
+    accentTone: "green",
+    status: "error",
+    sampleSize: 0,
+    lastComputedAt: nowIso,
+  },
+  {
+    key: "optimal_sleep_cutoff",
+    title: "Optimal sleep cutoff",
+    accent: "SOON",
+    detail: "We need a bit more clean data before this insight can show up",
+    accentTone: "neutral",
+    status: "error",
+    sampleSize: 0,
+    lastComputedAt: nowIso,
+  },
+  {
+    key: "body_battery_leak",
+    title: "Body battery leak",
+    accent: "SOON",
+    detail: "We need a bit more clean data before this insight can show up",
+    accentTone: "red",
+    status: "error",
+    sampleSize: 0,
+    lastComputedAt: nowIso,
+  },
+  {
+    key: "strain_limit",
+    title: "Your strain limit",
+    accent: "SOON",
+    detail: "We need a bit more clean data before this insight can show up",
+    accentTone: "neutral",
+    status: "error",
+    sampleSize: 0,
+    lastComputedAt: nowIso,
+  },
+  {
+    key: "recovery_speed",
+    title: "Recovery speed",
+    accent: "SOON",
+    detail: "We need a bit more clean data before this insight can show up",
+    accentTone: "neutral",
+    status: "error",
+    sampleSize: 0,
+    lastComputedAt: nowIso,
+  },
+  {
+    key: "best_worst_day",
+    title: "Best & worst day",
+    accent: "SOON",
+    detail: "We need a bit more clean data before this insight can show up",
+    accentTone: "neutral",
+    status: "error",
+    sampleSize: 0,
+    lastComputedAt: nowIso,
+  },
+  {
+    key: "hrv_threshold",
+    title: "HRV threshold",
+    accent: "SOON",
+    detail: "We need a bit more clean data before this insight can show up",
+    accentTone: "red",
+    status: "error",
+    sampleSize: 0,
+    lastComputedAt: nowIso,
+  },
+  {
+    key: "sleep_gap_days",
+    title: "Sleep gap days",
+    accent: "SOON",
+    detail: "We need a bit more clean data before this insight can show up",
+    accentTone: "red",
+    status: "error",
+    sampleSize: 0,
+    lastComputedAt: nowIso,
+  },
+  {
+    key: "recovery_streak",
+    title: "Recovery streak",
+    accent: "SOON",
+    detail: "We need a bit more clean data before this insight can show up",
+    accentTone: "green",
+    status: "error",
+    sampleSize: 0,
+    lastComputedAt: nowIso,
+  },
+];
+
 export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsightCard[]> => {
   const loadUserEarlyInsights = async (): Promise<EarlyInsightCard[]> => {
-  const supabase = await createSupabaseServerClient();
-  const nowIso = new Date().toISOString();
-  const lookbackStart = addDaysToDateString(nowIso.slice(0, 10), -(EARLY_INSIGHTS_LOOKBACK_DAYS - 1));
+    try {
+      const supabase = await createSupabaseServerClient();
+      const nowIso = new Date().toISOString();
+      const lookbackStart = addDaysToDateString(nowIso.slice(0, 10), -(EARLY_INSIGHTS_LOOKBACK_DAYS - 1));
 
-  const [dailyRes, sleepsRes, journalRes] = await Promise.all([
-    supabase
-      .from("user_daily_metrics")
-      .select("metric_date, recovery_score_pct, hrv_ms, day_strain, workouts_count")
-      .eq("user_id", userId)
-      .gte("metric_date", lookbackStart)
-      .order("metric_date", { ascending: true }),
-    supabase
-      .from("whoop_sleep_facts")
-      .select("sleep_onset_at, wake_onset_at, asleep_duration_min, sleep_consistency_percent, nap")
-      .eq("user_id", userId)
-      .gte("wake_onset_at", `${lookbackStart}T00:00:00.000Z`)
-      .order("wake_onset_at", { ascending: true }),
-    supabase
-      .from("whoop_journal_facts")
-      .select("cycle_start_at, question_text, answered_yes")
-      .eq("user_id", userId)
-      .gte("cycle_start_at", `${lookbackStart}T00:00:00.000Z`)
-      .order("cycle_start_at", { ascending: true }),
-  ]);
+      const [dailyRes, sleepsRes, journalRes] = await Promise.all([
+        supabase
+          .from("user_daily_metrics")
+          .select("metric_date, recovery_score_pct, hrv_ms, day_strain, workouts_count")
+          .eq("user_id", userId)
+          .gte("metric_date", lookbackStart)
+          .order("metric_date", { ascending: true }),
+        supabase
+          .from("whoop_sleep_facts")
+          .select("sleep_onset_at, wake_onset_at, asleep_duration_min, sleep_consistency_percent, nap")
+          .eq("user_id", userId)
+          .gte("wake_onset_at", `${lookbackStart}T00:00:00.000Z`)
+          .order("wake_onset_at", { ascending: true }),
+        supabase
+          .from("whoop_journal_facts")
+          .select("cycle_start_at, question_text, answered_yes")
+          .eq("user_id", userId)
+          .gte("cycle_start_at", `${lookbackStart}T00:00:00.000Z`)
+          .order("cycle_start_at", { ascending: true }),
+      ]);
 
-  if (dailyRes.error) throw new Error(`Failed to load daily metrics: ${dailyRes.error.message}`);
-  if (sleepsRes.error) throw new Error(`Failed to load sleep facts: ${sleepsRes.error.message}`);
-  if (journalRes.error) throw new Error(`Failed to load journal facts: ${journalRes.error.message}`);
+      if (dailyRes.error) throw new Error(`Failed to load daily metrics: ${dailyRes.error.message}`);
+      if (sleepsRes.error) throw new Error(`Failed to load sleep facts: ${sleepsRes.error.message}`);
+      if (journalRes.error) throw new Error(`Failed to load journal facts: ${journalRes.error.message}`);
 
-  const dailyRows = ((dailyRes.data ?? []) as DailyMetricRow[]).map((row) => ({
-    ...row,
-    recovery_score_pct: row.recovery_score_pct == null ? null : Number(row.recovery_score_pct),
-    hrv_ms: row.hrv_ms == null ? null : Number(row.hrv_ms),
-    day_strain: row.day_strain == null ? null : Number(row.day_strain),
-    workouts_count: row.workouts_count == null ? 0 : Number(row.workouts_count),
-  }));
+      const dailyRows = ((dailyRes.data ?? []) as DailyMetricRow[]).map((row) => ({
+        ...row,
+        recovery_score_pct: row.recovery_score_pct == null ? null : Number(row.recovery_score_pct),
+        hrv_ms: row.hrv_ms == null ? null : Number(row.hrv_ms),
+        day_strain: row.day_strain == null ? null : Number(row.day_strain),
+        workouts_count: row.workouts_count == null ? 0 : Number(row.workouts_count),
+      }));
 
-  const sleepRows = (sleepsRes.data ?? []) as SleepFactRow[];
-  const journalRows = (journalRes.data ?? []) as JournalFactRow[];
+      const sleepRows = (sleepsRes.data ?? []) as SleepFactRow[];
+      const journalRows = (journalRes.data ?? []) as JournalFactRow[];
 
-  const dailyByDate = new Map<string, DailyMetricRow>();
-  for (const row of dailyRows) {
-    dailyByDate.set(row.metric_date, row);
-  }
+      const dailyByDate = new Map<string, DailyMetricRow>();
+      for (const row of dailyRows) {
+        dailyByDate.set(row.metric_date, row);
+      }
 
-  const primarySleepByDate = getPrimarySleepPerDate(sleepRows);
-  const sleepJoined: SleepJoinedPoint[] = [];
+      const primarySleepByDate = getPrimarySleepPerDate(sleepRows);
+      const sleepJoined: SleepJoinedPoint[] = [];
 
-  for (const [wakeDate, sleep] of primarySleepByDate.entries()) {
-    const day = dailyByDate.get(wakeDate);
-    sleepJoined.push({
-      wakeDate,
-      sleepStartMinute: isoToUtcMinuteOfDay(sleep.sleep_onset_at),
-      sleepDurationMin: sleep.asleep_duration_min == null ? null : Number(sleep.asleep_duration_min),
-      sleepConsistencyPct: sleep.sleep_consistency_percent == null ? null : Number(sleep.sleep_consistency_percent),
-      recovery: day?.recovery_score_pct ?? null,
-      hrv: day?.hrv_ms ?? null,
-      strain: day?.day_strain ?? null,
-      workoutsCount: day?.workouts_count ?? 0,
-    });
-  }
+      for (const [wakeDate, sleep] of primarySleepByDate.entries()) {
+        const day = dailyByDate.get(wakeDate);
+        sleepJoined.push({
+          wakeDate,
+          sleepStartMinute: isoToUtcMinuteOfDay(sleep.sleep_onset_at),
+          sleepDurationMin: sleep.asleep_duration_min == null ? null : Number(sleep.asleep_duration_min),
+          sleepConsistencyPct: sleep.sleep_consistency_percent == null ? null : Number(sleep.sleep_consistency_percent),
+          recovery: day?.recovery_score_pct ?? null,
+          hrv: day?.hrv_ms ?? null,
+          strain: day?.day_strain ?? null,
+          workoutsCount: day?.workouts_count ?? 0,
+        });
+      }
 
-  const builders: InsightBuilder[] = [
+      const builders: InsightBuilder[] = [
     {
       key: "sober_streak_effect",
       title: "Sober streak effect",
@@ -637,9 +731,14 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
         };
       },
     },
-  ];
+      ];
 
-    return builders.map((builder) => buildInsightCard(nowIso, builder));
+      return builders.map((builder) => buildInsightCard(nowIso, builder));
+    } catch (error) {
+      console.error(`Failed to load early insights for user ${userId}`, error);
+      const nowIso = new Date().toISOString();
+      return getFallbackInsightCards(nowIso);
+    }
   };
 
   return unstable_cache(loadUserEarlyInsights, [EARLY_INSIGHTS_TAG_PREFIX, userId], {
