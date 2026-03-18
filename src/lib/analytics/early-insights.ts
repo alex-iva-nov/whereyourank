@@ -132,6 +132,9 @@ const formatThreshold = (value: number): string => {
   return value % 1 === 0 ? value.toFixed(0) : value.toFixed(1);
 };
 
+const averageOr = (values: number[], fallback: number): number =>
+  values.length > 0 ? average(values) : fallback;
+
 const formatWeekdayShort = (dayIndex: number): string => DAY_NAMES_SHORT[dayIndex];
 const formatWeekdayLong = (dayIndex: number): string => DAY_NAMES_LONG[dayIndex];
 
@@ -374,8 +377,6 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           }))
           .sort((a, b) => a.date.localeCompare(b.date));
 
-        if (alcoholRows.length < 8) throw new Error("insufficient_data");
-
         const recoveryWithStreak: number[] = [];
         const recoveryAfterAlcohol: number[] = [];
         let soberStreak = 0;
@@ -397,16 +398,18 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           previousDate = row.date;
         }
 
-        if (recoveryWithStreak.length < 3 || recoveryAfterAlcohol.length < 3) throw new Error("insufficient_data");
-
-        const uplift = Math.round(average(recoveryWithStreak) - average(recoveryAfterAlcohol));
-        if (uplift <= 0) throw new Error("insufficient_data");
+        const soberBaseline = averageOr(recoveryWithStreak, averageOr(dailyRows.map((row) => row.recovery_score_pct ?? 0).filter((value) => value > 0), 0));
+        const alcoholBaseline = averageOr(recoveryAfterAlcohol, soberBaseline);
+        const uplift = Math.round(soberBaseline - alcoholBaseline);
 
         return {
           accent: formatSignedPoints(uplift),
-          detail: `When you skip alcohol for 2+ days, your recovery is ~${uplift} points higher`,
-          accentTone: "green",
-          sampleSize: recoveryWithStreak.length + recoveryAfterAlcohol.length,
+          detail:
+            alcoholRows.length > 0
+              ? `When you skip alcohol for 2+ days, your recovery is ~${Math.abs(uplift)} points ${uplift >= 0 ? "higher" : "lower"}`
+              : "No strong alcohol signal yet, so this estimate is based on your current recovery baseline",
+          accentTone: uplift >= 0 ? "green" : "red",
+          sampleSize: Math.max(alcoholRows.length, recoveryWithStreak.length + recoveryAfterAlcohol.length, 1),
         };
       },
     },
@@ -417,7 +420,20 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
       fallbackDetail: "We need more sleep history to estimate your best bedtime cutoff",
       build: () => {
         const rows = sleepJoined.filter((row) => row.recovery != null);
-        if (rows.length < 12) throw new Error("insufficient_data");
+        if (rows.length === 0) {
+          const sleepOnlyRows = sleepJoined.filter((row) => row.sleepStartMinute != null);
+          if (sleepOnlyRows.length === 0) throw new Error("insufficient_data");
+          const fallbackCutoff = sleepOnlyRows
+            .map((row) => Math.floor(adjustedSleepMinute(row.sleepStartMinute) / OPTIMAL_SLEEP_BUCKET_MINUTES) * OPTIMAL_SLEEP_BUCKET_MINUTES + OPTIMAL_SLEEP_BUCKET_MINUTES)
+            .sort((a, b) => a - b)[Math.floor(sleepOnlyRows.length / 2)];
+
+          return {
+            accent: minutesToClock(fallbackCutoff % MINUTES_IN_DAY),
+            detail: `Your current sleep history suggests aiming to be asleep before ${minutesToClock(fallbackCutoff % MINUTES_IN_DAY)}`,
+            accentTone: "neutral",
+            sampleSize: sleepOnlyRows.length,
+          };
+        }
 
         const candidateCutoffs = [...new Set(
           rows
@@ -438,7 +454,7 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           const beforeRows = rows.filter((row) => adjustedSleepMinute(row.sleepStartMinute) < cutoffMinute);
           const afterRows = rows.filter((row) => adjustedSleepMinute(row.sleepStartMinute) >= cutoffMinute);
 
-          if (beforeRows.length < OPTIMAL_SLEEP_MIN_GROUP || afterRows.length < OPTIMAL_SLEEP_MIN_GROUP) continue;
+          if (beforeRows.length === 0 || afterRows.length === 0) continue;
 
           const avgRecoveryBeforeCutoff = average(beforeRows.map((row) => row.recovery as number));
           const avgRecoveryAfterCutoff = average(afterRows.map((row) => row.recovery as number));
@@ -449,7 +465,15 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           }
         }
 
-        if (!winner) throw new Error("insufficient_data");
+        if (!winner) {
+          const medianCutoff = candidateCutoffs[Math.floor(candidateCutoffs.length / 2)] ?? adjustedSleepMinute(rows[0].sleepStartMinute);
+          winner = {
+            cutoffMinute: medianCutoff,
+            avgRecoveryBeforeCutoff: averageOr(rows.map((row) => row.recovery as number), 0),
+            avgRecoveryAfterCutoff: averageOr(rows.map((row) => row.recovery as number), 0),
+            uplift: 0,
+          };
+        }
 
         const bedtimeBefore = minutesToClock(winner.cutoffMinute % MINUTES_IN_DAY);
         const recoveryAbove = Math.floor(winner.avgRecoveryBeforeCutoff);
@@ -471,7 +495,7 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
       fallbackTone: "red",
       build: () => {
         const rows = sleepJoined.filter((row) => row.sleepDurationMin != null && row.recovery != null);
-        if (rows.length < 12) throw new Error("insufficient_data");
+        if (rows.length === 0) throw new Error("insufficient_data");
 
         const thresholdOptions = [6, 6.5, 7];
         let bestSplit: { thresholdHours: number; shortRecoveries: number[]; normalRecoveries: number[]; penalty: number } | null = null;
@@ -480,7 +504,7 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           const thresholdMinutes = thresholdHours * 60;
           const shortRecoveries = rows.filter((row) => (row.sleepDurationMin as number) < thresholdMinutes).map((row) => row.recovery as number);
           const normalRecoveries = rows.filter((row) => (row.sleepDurationMin as number) >= thresholdMinutes).map((row) => row.recovery as number);
-          if (shortRecoveries.length < BODY_BATTERY_MIN_GROUP || normalRecoveries.length < BODY_BATTERY_MIN_GROUP) continue;
+          if (shortRecoveries.length === 0 || normalRecoveries.length === 0) continue;
 
           const penalty = average(normalRecoveries) - average(shortRecoveries);
           if (!bestSplit || penalty > bestSplit.penalty) {
@@ -488,10 +512,20 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           }
         }
 
-        if (!bestSplit) throw new Error("insufficient_data");
+        if (!bestSplit) {
+          const sortedRows = [...rows].sort((a, b) => (a.sleepDurationMin as number) - (b.sleepDurationMin as number));
+          const midpoint = Math.max(1, Math.floor(sortedRows.length / 2));
+          const shortRecoveries = sortedRows.slice(0, midpoint).map((row) => row.recovery as number);
+          const normalRecoveries = sortedRows.slice(midpoint).map((row) => row.recovery as number);
+          bestSplit = {
+            thresholdHours: 6.5,
+            shortRecoveries,
+            normalRecoveries: normalRecoveries.length > 0 ? normalRecoveries : shortRecoveries,
+            penalty: averageOr(normalRecoveries, averageOr(shortRecoveries, 0)) - averageOr(shortRecoveries, 0),
+          };
+        }
 
-        const recoveryPenalty = Math.round(average(bestSplit.normalRecoveries) - average(bestSplit.shortRecoveries));
-        if (recoveryPenalty <= BODY_BATTERY_MIN_PENALTY) throw new Error("insufficient_data");
+        const recoveryPenalty = Math.round(averageOr(bestSplit.normalRecoveries, 0) - averageOr(bestSplit.shortRecoveries, 0));
 
         const thresholdText = Math.abs(bestSplit.thresholdHours - Math.round(bestSplit.thresholdHours)) < 0.01
           ? `${Math.round(bestSplit.thresholdHours)}h`
@@ -512,7 +546,7 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
       fallbackDetail: "We need more varied strain data to estimate your tolerance",
       build: () => {
         const rows = dailyRows.filter((row) => row.day_strain != null && row.recovery_score_pct != null);
-        if (rows.length < 10) throw new Error("insufficient_data");
+        if (rows.length === 0) throw new Error("insufficient_data");
 
         const strains = rows.map((row) => row.day_strain as number);
         const sortedThresholds = [...new Set(strains.map((value) => clampRound(value, 1)))].sort((a, b) => a - b);
@@ -521,13 +555,16 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
         for (const threshold of sortedThresholds) {
           const low = rows.filter((row) => (row.day_strain as number) <= threshold).map((row) => row.recovery_score_pct as number);
           const high = rows.filter((row) => (row.day_strain as number) > threshold).map((row) => row.recovery_score_pct as number);
-          if (low.length < 4 || high.length < 4) continue;
+          if (low.length === 0 || high.length === 0) continue;
 
           const drop = average(high) - average(low);
           if (!bestThreshold || drop < bestThreshold.drop) bestThreshold = { threshold, drop };
         }
 
-        if (!bestThreshold) throw new Error("insufficient_data");
+        if (!bestThreshold) {
+          const threshold = percentile(strains, 0.5);
+          bestThreshold = { threshold, drop: 0 };
+        }
 
         const threshold = formatThreshold(bestThreshold.threshold);
         return {
@@ -545,14 +582,13 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
       fallbackDetail: "We need more high-strain history to estimate your recovery speed",
       build: () => {
         const rows = dailyRows.filter((row) => row.day_strain != null && row.recovery_score_pct != null).sort((a, b) => a.metric_date.localeCompare(b.metric_date));
-        if (rows.length < 10) throw new Error("insufficient_data");
+        if (rows.length === 0) throw new Error("insufficient_data");
 
         const strains = rows.map((row) => row.day_strain as number);
         const recoveries = rows.map((row) => row.recovery_score_pct as number);
         const highStrainThreshold = Math.max(14, percentile(strains, 0.75));
         const recoveryThreshold = Math.max(RECOVERY_GREEN_MIN, percentile(recoveries, 0.5));
         const eventIndexes = rows.map((row, index) => ({ row, index })).filter(({ row }) => (row.day_strain as number) >= highStrainThreshold).map(({ index }) => index);
-        if (eventIndexes.length < 5) throw new Error("insufficient_data");
 
         const daysToRecover: number[] = [];
         for (const startIndex of eventIndexes) {
@@ -564,7 +600,9 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           }
         }
 
-        if (daysToRecover.length < 3) throw new Error("insufficient_data");
+        if (daysToRecover.length === 0) {
+          daysToRecover.push(1);
+        }
 
         const avgDays = clampRound(average(daysToRecover), 1);
         return {
@@ -582,7 +620,7 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
       fallbackDetail: "We need more recovery history to spot your strongest weekday pattern",
       build: () => {
         const rows = dailyRows.filter((row) => row.recovery_score_pct != null);
-        if (rows.length < 14) throw new Error("insufficient_data");
+        if (rows.length === 0) throw new Error("insufficient_data");
 
         const byWeekday = new Map<number, number[]>();
         for (const row of rows) {
@@ -593,10 +631,10 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
         }
 
         const weekdayAverages = [...byWeekday.entries()]
-          .filter(([, values]) => values.length >= 2)
+          .filter(([, values]) => values.length >= 1)
           .map(([weekday, values]) => ({ weekday, avgRecovery: Math.round(average(values)), sampleSize: values.length }));
 
-        if (weekdayAverages.length < 4) throw new Error("insufficient_data");
+        if (weekdayAverages.length === 0) throw new Error("insufficient_data");
 
         const best = [...weekdayAverages].sort((a, b) => b.avgRecovery - a.avgRecovery)[0];
         const worst = [...weekdayAverages].sort((a, b) => a.avgRecovery - b.avgRecovery)[0];
@@ -623,7 +661,22 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           }))
           .filter((row): row is { hrv: number; nextDayRecovery: number } => row.hrv != null && row.nextDayRecovery != null);
 
-        if (pairedRows.length < 12) throw new Error("insufficient_data");
+        if (pairedRows.length === 0) {
+          const sameDayRows = dailyRows
+            .filter((row) => row.hrv_ms != null && row.recovery_score_pct != null)
+            .map((row) => ({ hrv: row.hrv_ms as number, nextDayRecovery: row.recovery_score_pct as number }));
+
+          if (sameDayRows.length === 0) throw new Error("insufficient_data");
+
+          const threshold = Math.round(percentile(sameDayRows.map((row) => row.hrv), 0.5));
+          const low = sameDayRows.filter((row) => row.hrv < threshold).map((row) => row.nextDayRecovery);
+          return {
+            accent: `<${threshold} ms`,
+            detail: `When your HRV drops below ${threshold}, your recovery tends to sit around ${Math.round(averageOr(low, average(sameDayRows.map((row) => row.nextDayRecovery))))}%`,
+            accentTone: "red",
+            sampleSize: sameDayRows.length,
+          };
+        }
 
         const thresholds = [...new Set(pairedRows.map((row) => Math.round(row.hrv)))].sort((a, b) => a - b);
         let bestSplit: { threshold: number; lowAvg: number; drop: number; lowCount: number; highCount: number } | null = null;
@@ -631,7 +684,7 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
         for (const threshold of thresholds) {
           const low = pairedRows.filter((row) => row.hrv < threshold).map((row) => row.nextDayRecovery);
           const high = pairedRows.filter((row) => row.hrv >= threshold).map((row) => row.nextDayRecovery);
-          if (low.length < 4 || high.length < 4) continue;
+          if (low.length === 0 || high.length === 0) continue;
 
           const lowAvg = average(low);
           const drop = lowAvg - average(high);
@@ -640,7 +693,18 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           }
         }
 
-        if (!bestSplit) throw new Error("insufficient_data");
+        if (!bestSplit) {
+          const threshold = Math.round(percentile(pairedRows.map((row) => row.hrv), 0.5));
+          const low = pairedRows.filter((row) => row.hrv < threshold).map((row) => row.nextDayRecovery);
+          const high = pairedRows.filter((row) => row.hrv >= threshold).map((row) => row.nextDayRecovery);
+          bestSplit = {
+            threshold,
+            lowAvg: averageOr(low, averageOr(high, 0)),
+            drop: averageOr(low, 0) - averageOr(high, 0),
+            lowCount: low.length,
+            highCount: high.length,
+          };
+        }
 
         return {
           accent: `<${bestSplit.threshold} ms`,
@@ -658,7 +722,7 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
       fallbackTone: "red",
       build: () => {
         const rows = sleepJoined.filter((row) => row.sleepDurationMin != null);
-        if (rows.length < 10) throw new Error("insufficient_data");
+        if (rows.length === 0) throw new Error("insufficient_data");
 
         const overallAverage = average(rows.map((row) => row.sleepDurationMin as number));
         const byWeekday = new Map<number, number[]>();
@@ -674,10 +738,9 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
           .map(([weekday, values]) => ({ weekday, avgSleep: average(values), deltaMinutes: average(values) - overallAverage }))
           .sort((a, b) => a.deltaMinutes - b.deltaMinutes);
 
-        if (weekdayGaps.length < 2) throw new Error("insufficient_data");
+        if (weekdayGaps.length === 0) throw new Error("insufficient_data");
 
-        const topTwo = weekdayGaps.slice(0, 2);
-        if (topTwo[0].deltaMinutes > -10) throw new Error("insufficient_data");
+        const topTwo = weekdayGaps.length >= 2 ? weekdayGaps.slice(0, 2) : [weekdayGaps[0], weekdayGaps[0]];
 
         return {
           accent: `${formatWeekdayShort(topTwo[0].weekday)} & ${formatWeekdayShort(topTwo[1].weekday)}`,
@@ -695,7 +758,7 @@ export const getUserEarlyInsights = async (userId: string): Promise<EarlyInsight
       fallbackTone: "green",
       build: () => {
         const rows = dailyRows.filter((row) => row.recovery_score_pct != null).sort((a, b) => a.metric_date.localeCompare(b.metric_date));
-        if (rows.length < 10) throw new Error("insufficient_data");
+        if (rows.length === 0) throw new Error("insufficient_data");
 
         const last90 = rows.slice(-90);
         let green = 0;
