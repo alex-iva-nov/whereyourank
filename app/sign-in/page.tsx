@@ -1,21 +1,13 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
 import { BrandWordmark } from "@/components/brand-wordmark";
-import { getCurrentProfile, getCurrentUser } from "@/lib/auth/server";
 import { SignInForm } from "./sign-in-form";
 
 export const metadata: Metadata = {
   title: "Sign In",
 };
 
-export default async function SignInPage() {
-  const user = await getCurrentUser();
-
-  if (user) {
-    const profile = await getCurrentProfile(user.id);
-    redirect(profile ? "/dashboard" : "/onboarding");
-  }
+export default function SignInPage() {
   return (
     <main style={{ maxWidth: 1120, margin: "0 auto", padding: 16, minHeight: "100vh", display: "grid", alignItems: "center" }}>
       <style>{`

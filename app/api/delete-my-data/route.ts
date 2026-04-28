@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { revalidateEarlyComparisonCohorts } from "@/lib/analytics/early-comparison";
 import { revalidateUserEarlyInsights } from "@/lib/analytics/early-insights";
 import { deleteUserDataForMvp } from "@/lib/user/delete-data";
 import { supabaseAdmin } from "@/lib/supabase/admin-client";
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
     await supabase.auth.signOut();
 
     revalidateUserDataCount();
+    revalidateEarlyComparisonCohorts();
     revalidateUserEarlyInsights(user.id);
 
     const response = NextResponse.json({ ok: true, result });

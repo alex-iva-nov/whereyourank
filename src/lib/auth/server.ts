@@ -1,5 +1,7 @@
-﻿import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
+import { publicEnv } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server-client";
 
 type UserProfile = {
@@ -9,7 +11,37 @@ type UserProfile = {
   country: string;
 };
 
+const getSupabaseProjectRef = () => {
+  try {
+    return new URL(publicEnv.supabaseUrl).hostname.split(".")[0];
+  } catch {
+    return null;
+  }
+};
+
+const hasSupabaseAuthCookie = async () => {
+  const projectRef = getSupabaseProjectRef();
+  const cookieStore = await cookies();
+  const authCookieName = projectRef ? `sb-${projectRef}-auth-token` : null;
+
+  return cookieStore.getAll().some(({ name, value }) => {
+    if (!value) {
+      return false;
+    }
+
+    if (authCookieName && (name === authCookieName || name.startsWith(`${authCookieName}.`))) {
+      return true;
+    }
+
+    return name.startsWith("sb-") && name.includes("-auth-token");
+  });
+};
+
 export const getCurrentUser = async () => {
+  if (!(await hasSupabaseAuthCookie())) {
+    return null;
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -52,4 +84,3 @@ export const requireOnboardingComplete = async () => {
 
   return { user, profile };
 };
-

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { postProductEvent } from "@/lib/product-events";
@@ -8,7 +8,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 
 export function SignInForm() {
   const router = useRouter();
-  const supabase = createSupabaseBrowserClient();
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [email, setEmail] = useState("");
@@ -16,6 +16,20 @@ export function SignInForm() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (active && data.session) {
+        router.replace("/dashboard");
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [router, supabase]);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -33,7 +47,7 @@ export function SignInForm() {
         if (signInError) throw signInError;
 
         await postProductEvent("sign_in_completed", { method: "password" }).catch(() => undefined);
-        router.push("/");
+        router.replace("/dashboard");
         router.refresh();
         return;
       }
@@ -50,7 +64,7 @@ export function SignInForm() {
           method: "password",
           email_confirmation_required: false,
         }).catch(() => undefined);
-        router.push("/");
+        router.replace("/onboarding");
         router.refresh();
       } else {
         setMessage("Account created. If email confirmation is enabled, please confirm your email to continue.");

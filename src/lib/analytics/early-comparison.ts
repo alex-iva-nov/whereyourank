@@ -1,5 +1,7 @@
 import "server-only";
 
+import { revalidateTag, unstable_cache } from "next/cache";
+
 import { getHowYouCompareSoFarMinSampleSize } from "@/lib/analytics/comparison-policy";
 import { estimatePercentileFromAnchors } from "@/lib/analytics/percentile";
 import {
@@ -46,6 +48,7 @@ const emptyComparison = (): EarlyComparisonSectionData => ({
 });
 
 const METRICS: MetricKey[] = ["recovery_score_pct", "asleep_duration_min", "hrv_ms"];
+const EARLY_COMPARISON_COHORTS_CACHE_TAG = "early-comparison-cohorts";
 
 const buildRecoveryComparison = (
   userValue: number | null,
@@ -84,38 +87,17 @@ const buildRecoveryComparison = (
 
 export const getEarlyComparisonSectionData = async (userId: string): Promise<EarlyComparisonSectionData> => {
   try {
-    const [userRows, latestRows] = await Promise.all([
+    const [userRows, cohortRows] = await Promise.all([
       getLatestAggregateRowsForUser(userId, METRICS),
-      getLatestAggregateRowsForMetrics(METRICS),
+      getCachedEarlyComparisonCohorts(),
     ]);
 
-    const cohortMinSampleSize = getHowYouCompareSoFarMinSampleSize();
     const userValueByMetric = new Map<MetricKey, number>();
-    const cohortByMetric = new Map<MetricKey, CohortPercentileRow>();
+    const cohortByMetric = new Map<MetricKey, CohortPercentileRow>(cohortRows.map((row) => [row.metric_key, row]));
 
     for (const row of userRows) {
       if (Number.isFinite(row.metric_value)) {
         userValueByMetric.set(row.metric_key as MetricKey, row.metric_value);
-      }
-    }
-
-    for (const metricKey of METRICS) {
-      const metricValues = latestRows
-        .filter((row) => row.metric_key === metricKey)
-        .map((row) => Number(row.metric_value))
-        .filter((value) => Number.isFinite(value));
-
-      const anchors = buildPercentileAnchors(metricValues);
-      if (anchors && anchors.sampleSize >= cohortMinSampleSize && Number.isFinite(anchors.p50)) {
-        cohortByMetric.set(metricKey, {
-          metric_key: metricKey,
-          sample_size: anchors.sampleSize,
-          p10: anchors.p10,
-          p25: anchors.p25,
-          p50: anchors.p50,
-          p75: anchors.p75,
-          p90: anchors.p90,
-        });
       }
     }
 
@@ -163,3 +145,42 @@ export const getEarlyComparisonSectionData = async (userId: string): Promise<Ear
     return emptyComparison();
   }
 };
+
+const loadEarlyComparisonCohorts = async (): Promise<CohortPercentileRow[]> => {
+  const latestRows = await getLatestAggregateRowsForMetrics(METRICS);
+  const cohortMinSampleSize = getHowYouCompareSoFarMinSampleSize();
+  const cohorts: CohortPercentileRow[] = [];
+
+  for (const metricKey of METRICS) {
+    const metricValues = latestRows
+      .filter((row) => row.metric_key === metricKey)
+      .map((row) => Number(row.metric_value))
+      .filter((value) => Number.isFinite(value));
+
+    const anchors = buildPercentileAnchors(metricValues);
+    if (anchors && anchors.sampleSize >= cohortMinSampleSize && Number.isFinite(anchors.p50)) {
+      cohorts.push({
+        metric_key: metricKey,
+        sample_size: anchors.sampleSize,
+        p10: anchors.p10,
+        p25: anchors.p25,
+        p50: anchors.p50,
+        p75: anchors.p75,
+        p90: anchors.p90,
+      });
+    }
+  }
+
+  return cohorts;
+};
+
+const getCachedEarlyComparisonCohorts = unstable_cache(
+  loadEarlyComparisonCohorts,
+  [EARLY_COMPARISON_COHORTS_CACHE_TAG],
+  {
+    revalidate: 300,
+    tags: [EARLY_COMPARISON_COHORTS_CACHE_TAG],
+  },
+);
+
+export const revalidateEarlyComparisonCohorts = () => revalidateTag(EARLY_COMPARISON_COHORTS_CACHE_TAG);

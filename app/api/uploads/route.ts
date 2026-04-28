@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { revalidateEarlyComparisonCohorts } from "@/lib/analytics/early-comparison";
 import { recomputeUserDerivedAnalytics } from "@/lib/analytics/recompute";
 import { revalidateUserEarlyInsights } from "@/lib/analytics/early-insights";
 import { publicEnv } from "@/lib/env";
@@ -197,6 +198,7 @@ export async function POST(request: Request) {
     }
 
     revalidateUserDataCount();
+    revalidateEarlyComparisonCohorts();
     revalidateUserEarlyInsights(user.id);
 
     const uploadReadiness = await getUploadReadinessForUser(supabaseAdmin, user.id);
