@@ -3,14 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { markPasswordResetRequested } from "@/lib/auth/password-reset";
 import { postProductEvent } from "@/lib/product-events";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+
+type FormMode = "sign-in" | "sign-up" | "password-reset";
 
 export function SignInForm() {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
-  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
+  const [mode, setMode] = useState<FormMode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +41,18 @@ export function SignInForm() {
     setLoading(true);
 
     try {
+      if (mode === "password-reset") {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+
+        if (resetError) throw resetError;
+
+        markPasswordResetRequested();
+        setMessage("Password reset email sent. Check your inbox and follow the link to set a new password.");
+        return;
+      }
+
       if (mode === "sign-in") {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -90,26 +105,54 @@ export function SignInForm() {
         />
       </label>
 
-      <label style={{ display: "grid", gap: 6 }}>
-        <span style={{ color: "#c7ced4", fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700 }}>Password</span>
-        <input
-          required
-          minLength={8}
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{ padding: 14, borderRadius: 16, border: "1px solid #2d353c", background: "#171d22", color: "#f5f5f5" }}
-        />
-      </label>
+      {mode !== "password-reset" ? (
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ color: "#c7ced4", fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700 }}>Password</span>
+          <input
+            required
+            minLength={8}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ padding: 14, borderRadius: 16, border: "1px solid #2d353c", background: "#171d22", color: "#f5f5f5" }}
+          />
+        </label>
+      ) : (
+        <p style={{ margin: "-2px 0 2px", color: "#a3adb4", fontSize: 14, lineHeight: 1.45 }}>
+          Enter your account email and we'll send a link to set a new password.
+        </p>
+      )}
+
+      {mode === "sign-in" ? (
+        <button
+          type="button"
+          onClick={() => {
+            setMode("password-reset");
+            setError(null);
+            setMessage(null);
+          }}
+          style={{ justifySelf: "start", padding: 0, border: "none", background: "transparent", color: "#20d985", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+        >
+          Forgot password?
+        </button>
+      ) : null}
 
       {error ? <p style={{ color: "#b00020", margin: 0 }}>{error}</p> : null}
       {message ? <p style={{ color: "#20d985", margin: 0 }}>{message}</p> : null}
 
       <button type="submit" disabled={loading} style={{ padding: 14, borderRadius: 999, border: "none", background: "#f5f5f5", color: "#080808", fontWeight: 700 }}>
-        {loading ? "Please wait..." : mode === "sign-in" ? "Sign in" : "Create account"}
+        {loading ? "Please wait..." : mode === "sign-in" ? "Sign in" : mode === "sign-up" ? "Create account" : "Send reset link"}
       </button>
 
-      <button type="button" onClick={() => setMode(mode === "sign-in" ? "sign-up" : "sign-in")} style={{ padding: 14, borderRadius: 999, border: "1px solid #2d353c", background: "#171d22", color: "#f5f5f5", fontWeight: 600 }}>
+      <button
+        type="button"
+        onClick={() => {
+          setMode(mode === "sign-in" ? "sign-up" : "sign-in");
+          setError(null);
+          setMessage(null);
+        }}
+        style={{ padding: 14, borderRadius: 999, border: "1px solid #2d353c", background: "#171d22", color: "#f5f5f5", fontWeight: 600 }}
+      >
         {mode === "sign-in" ? "New here? Create an account" : "Already have an account? Sign in"}
       </button>
     </form>
